@@ -1,0 +1,31 @@
+{
+  "extends": "../../packages/dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../packages/dsh/packages/api/session-controller/src",
+    "outDir": "../../packages/dsh/packages/api/session-controller/lib/types",
+    "paths": {
+      "@deepseek-ai/dsh-api-session-controller/types": [
+        "../../packages/dsh/packages/api/session-controller/src/types.ts"
+      ]
+    },
+    "preserveSymlinks": true,
+    "typeRoots": [
+      "../../packages/dsh/scripts/types",
+      "../../node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ],
+    "composite": false,
+    "incremental": false
+  },
+  "exclude": [
+    "**/tests/**",
+    "**/*.spec.*",
+    "**/*.test.*"
+  ],
+  "references": [],
+  "include": [
+    "../../packages/dsh/packages/api/session-controller/src/*.ts"
+  ]
+}

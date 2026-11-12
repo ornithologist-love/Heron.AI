@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "sources": {
+    "dsh-mcp-manager": {
+      "repository": "https://github.com/Nichts0v0/dsh-mcp-manager.git",
+      "remote": "upstream",
+      "branch": "main",
+      "upstreamCommit": "335f797c30b9c3880d997c27343c609c8019f040",
+      "license": "packages/community/dsh-mcp-manager/LICENSE",
+      "directory": "packages/community/dsh-mcp-manager"
+    },
+    "dsh-skill-manager": {
+      "repository": "https://github.com/AKS1st/dsh-skill-manager.git",
+      "remote": "upstream",
+      "branch": "main",
+      "upstreamCommit": "fb452031031ea50a3287292d22b54e765d1039dc",
+      "license": "packages/community/dsh-skill-manager/LICENSE",
+      "directory": "packages/community/dsh-skill-manager"
+    },
+    "dsh": {
+      "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+      "remote": "upstream",
+      "branch": "master",
+      "upstreamTag": "dsh-v0.2.2-rc.1",
+      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "license": "packages/dsh/LICENSE",
+      "directory": "packages/dsh"
+    },
+    "dsh-better-sidebar": {
+      "repository": "https://github.com/omdsh-dev/DSH-better-sidebar.git",
+      "remote": "upstream",
+      "branch": "main",
+      "upstreamTag": "v0.30.1",
+      "upstreamCommit": "0b6293f05145d6852428a05035d5ea0f370992be",
+      "license": "packages/community/dsh-better-sidebar/LICENSE",
+      "directory": "packages/community/dsh-better-sidebar"
+    }
+  },
+  "delivery": "git-submodules"
+}

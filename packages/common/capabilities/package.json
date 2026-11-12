@@ -1,0 +1,20 @@
+{
+  "name": "@common/capabilities",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "peerDependencies": {"@deepseek-ai/schemastery": "3.19.0"},
+  "exports": {
+    ".": "./index.mjs",
+    "./controller": "./controller.mjs",
+    "./skills": "./skills.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "inject": ["@deepseek-ai/dsh-client-ui-settings", "@common/toolbar"],
+      "platform": "web"
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "preserveSymlinks": true,
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-primitives": [
+        "../../node_modules/@deepseek-ai/dsh-client-ui-primitives"
+      ]
+    },
+    "rootDir": "../../packages/community/dsh-mcp-manager/src",
+    "outDir": "../../packages/community/dsh-mcp-manager/lib/types",
+    "typeRoots": [
+      "../../node_modules/@types"
+    ],
+    "types": [
+      "node",
+      "react"
+    ],
+    "ignoreDeprecations": "6.0",
+    "composite": false,
+    "incremental": false
+  },
+  "exclude": [
+    "**/tests/**",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ],
+  "include": [
+    "../../packages/community/dsh-mcp-manager/src/client",
+    "../../packages/community/dsh-mcp-manager/src/env.d.ts"
+  ]
+}

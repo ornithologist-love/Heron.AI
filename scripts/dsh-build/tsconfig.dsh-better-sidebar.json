@@ -1,0 +1,15 @@
+{
+  "extends": "../../packages/community/dsh-better-sidebar/tsconfig.build.json",
+  "compilerOptions": {
+    "rootDir": "../../packages/community/dsh-better-sidebar/src",
+    "outDir": "../../packages/community/dsh-better-sidebar/lib/types",
+    "preserveSymlinks": false,
+    "typeRoots": ["../../node_modules/@types"],
+    "ignoreDeprecations": "6.0",
+    "noUncheckedSideEffectImports": false,
+    "composite": false,
+    "incremental": false
+  },
+  "include": ["../../packages/community/dsh-better-sidebar/src"],
+  "exclude": ["**/tests/**", "**/*.test.*", "**/*.spec.*"]
+}

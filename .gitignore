@@ -1,0 +1,20 @@
+node_modules/
+heron-ai-fork.json
+/.idea/
+/.cache/
+/dist/
+/artifacts/
+/data/
+/packages/community/dsh-skill-manager/lib/
+/packages/dsh/packages/client/file-upload/dist/
+bin/
+obj/
+*.user
+.env
+.env.*
+!.env.example
+
+# 过程材料（handoff / 计划 / 报告），见 E:/HeronAi/Docs/DOC-GOVERNANCE.md §4
+.work/
+__pycache__/
+/packages/common/runtime/src/heron-ai/migration/legacy-identifiers.json

@@ -1,0 +1,24 @@
+{
+  "extends": "../../packages/dsh/tsconfig.base.client.json",
+  "compilerOptions": {
+    "rootDir": "../../packages/dsh/packages/client/ui-settings-general/src",
+    "outDir": "../../packages/dsh/packages/client/ui-settings-general/lib/types",
+    "paths": {},
+    "preserveSymlinks": true,
+    "typeRoots": [
+      "../../packages/dsh/scripts/types",
+      "../../node_modules/@types"
+    ],
+    "composite": false,
+    "incremental": false
+  },
+  "include": [
+    "../../packages/dsh/packages/client/ui-settings-general/src"
+  ],
+  "exclude": [
+    "**/tests/**",
+    "**/*.spec.*",
+    "**/*.test.*"
+  ],
+  "references": []
+}

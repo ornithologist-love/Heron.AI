@@ -1,0 +1,28 @@
+{
+  "extends": "../../packages/dsh/tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "../../packages/dsh/packages/api/remotes/src",
+    "outDir": "../../packages/dsh/packages/api/remotes/lib/types",
+    "preserveSymlinks": true,
+    "typeRoots": [
+      "../../packages/dsh/scripts/types",
+      "../../node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ],
+    "composite": false,
+    "incremental": false,
+    "paths": {},
+    "noEmitOnError": true
+  },
+  "exclude": [
+    "**/tests/**",
+    "**/*.spec.*",
+    "**/*.test.*"
+  ],
+  "references": [],
+  "files": [
+    "../../packages/dsh/packages/api/remotes/src/index.ts"
+  ]
+}

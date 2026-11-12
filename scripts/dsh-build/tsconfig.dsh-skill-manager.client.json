@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+    "declaration": true,
+    "sourceMap": true,
+    "declarationMap": true,
+    "preserveSymlinks": true,
+    "rootDir": "../../packages/community/dsh-skill-manager/src",
+    "outDir": "../../packages/community/dsh-skill-manager/lib/types",
+    "typeRoots": [
+      "../../node_modules/@types"
+    ],
+    "types": [
+      "node",
+      "react"
+    ],
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@deepseek-ai/dsh-client-store": [
+        "../../node_modules/@deepseek-ai/dsh-client-store"
+      ],
+      "@deepseek-ai/dsh-client-ui-primitives": [
+        "../../node_modules/@deepseek-ai/dsh-client-ui-primitives"
+      ],
+      "@deepseek-ai/dsh-client-ui-slots": [
+        "../../node_modules/@deepseek-ai/dsh-client-ui-slots"
+      ]
+    },
+    "composite": false,
+    "incremental": false
+  },
+  "exclude": [
+    "**/tests/**",
+    "**/*.test.*",
+    "**/*.spec.*"
+  ],
+  "include": [
+    "../../packages/community/dsh-skill-manager/src/client",
+    "../../packages/community/dsh-skill-manager/src/css-modules.d.ts"
+  ]
+}

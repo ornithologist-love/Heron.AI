@@ -1,0 +1,9 @@
+flowchart TB
+  Host[其他宿主] --> Adapter[薄适配器与公开 SDK]
+  Adapter --> Runtime[HeronAI 本地运行时]
+  Runtime --> DSH[DSH 图与 Agent 底座]
+  Runtime --> Common[通用界面与插件服务]
+  Runtime --> Optional[显式安装的可选插件]
+  Common --> MCP[MCP 与 Skills 管理]
+  Common --> Workspaces[工作区与会话]
+  Optional --> Private[私有身份、业务及数据功能]

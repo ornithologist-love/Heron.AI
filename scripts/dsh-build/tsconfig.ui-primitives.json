@@ -1,0 +1,14 @@
+{
+  "extends": "../../packages/dsh/packages/client/ui-primitives/tsconfig.json",
+  "compilerOptions": {
+    "paths": {},
+    "preserveSymlinks": true,
+    "composite": false,
+    "incremental": false,
+    "typeRoots": [
+      "../../packages/dsh/scripts/types",
+      "../../node_modules/@types"
+    ]
+  },
+  "references": []
+}

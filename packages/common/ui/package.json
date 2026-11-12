@@ -1,0 +1,20 @@
+{
+  "name": "@common/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vue-tsc --noEmit && vite build --config vite.widgets.config.ts"
+  },
+  "dependencies": {
+    "tdesign-icons-vue-next": "0.4.4",
+    "tdesign-vue-next": "1.20.7",
+    "vue": "^3.5.12"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.8",
+    "typescript": "~5.6.2",
+    "vite": "^6.4.3",
+    "vue-tsc": "^3.3.11"
+  }
+}

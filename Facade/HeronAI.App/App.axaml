@@ -1,0 +1,3 @@
+<Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:theme="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent" x:Class="HeronAI.App.App">
+  <Application.Styles><theme:FluentTheme /></Application.Styles>
+</Application>

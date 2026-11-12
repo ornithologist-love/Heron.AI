@@ -1,0 +1,15 @@
+[submodule "dsh"]
+	path = packages/dsh
+	url = https://github.com/ornithologist-love/deepseek-harness.git
+	branch = feature/dsh-v0.2.2-rc.1
+[submodule "dsh-mcp-manager"]
+	path = packages/community/dsh-mcp-manager
+	url = https://github.com/ornithologist-love/dsh-mcp-manager.git
+	branch = master
+[submodule "dsh-skill-manager"]
+	path = packages/community/dsh-skill-manager
+	url = https://github.com/ornithologist-love/dsh-skill-manager.git
+	branch = master
+[submodule "packages/dsh-better-sidebar"]
+	path = packages/community/dsh-better-sidebar
+	url = https://github.com/omdsh-dev/DSH-better-sidebar.git

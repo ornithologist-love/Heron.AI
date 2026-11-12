@@ -1,0 +1,34 @@
+{
+  "name": "@heron-ai/dsh-heron-ai",
+  "license": "MIT",
+  "version": "1.0.0",
+  "description": "本地 AI 补充包：模型接入、凭据与功能模板；标准能力由 DSH 提供",
+  "private": true,
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./package.json": "./package.json",
+    "./settings/*": "./settings/*.mjs",
+    "./native-models": "./native-models.mjs",
+    "./default-model": "./default-model.mjs",
+    "./web": "./web.mjs",
+    "./theme-palettes": "./theme-palettes.mjs",
+    "./context": "./context.mjs",
+    "./preset-base": "./preset-base.mjs"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "dsh-mcp-manager"
+      ]
+    }
+  }
+}
