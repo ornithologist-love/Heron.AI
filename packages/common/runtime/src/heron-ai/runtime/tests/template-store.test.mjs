@@ -1,3 +1,5 @@
+// Anchor: Docs/architecture/extensions.md#功能模板
+// Template catalogs are validated on load; a prompt file cannot escape its catalog directory.
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'

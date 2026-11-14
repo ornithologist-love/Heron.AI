@@ -48,7 +48,8 @@
     "dev:mobile": "node scripts/dev.mjs --mobile",
     "release": "dotnet run --project tools/release --",
     "build:app": "dotnet build Facade/HeronAI.App/HeronAI.App.csproj -c Release",
-    "build:all": "npm run build && npm run build:app"
+    "build:all": "npm run build && npm run build:app",
+    "test": "node --test \"tests/*.test.mjs\" \"packages/common/**/tests/*.test.mjs\""
   },
   "engines": {
     "node": ">=24"
