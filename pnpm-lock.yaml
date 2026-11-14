@@ -243,9 +243,6 @@ importers:
       '@common/image-viewer':
         specifier: workspace:*
         version: link:../image-viewer
-      '@common/todo-list':
-        specifier: workspace:*
-        version: link:../todo-list
       '@common/toolbar':
         specifier: workspace:*
         version: link:../toolbar
@@ -1003,18 +1000,6 @@ importers:
       '@heron-ai/dsh-build':
         specifier: 1.0.0
         version: link:../../../scripts/dsh-build
-
-  packages/common/todo-list:
-    dependencies:
-      '@common/capabilities':
-        specifier: workspace:*
-        version: link:../capabilities
-      '@deepseek-ai/dsh-atomic-write':
-        specifier: workspace:*
-        version: link:../../dsh/packages/util/atomic-write
-      '@deepseek-ai/dsh-tools':
-        specifier: workspace:*
-        version: link:../../dsh/packages/core/tools
 
   packages/common/toolbar: {}
 

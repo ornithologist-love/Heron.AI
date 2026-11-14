@@ -132,8 +132,6 @@ async function buildComposition(config, extensions) {
     { id: 'common-preset-base', name: manifest.name + '/preset-base', config: {
       standard, delegatedModels: delegatedModelRoutes(config.providerCatalogSnapshot ?? {}) } },
     { id: 'better-sidebar', name: 'dsh-better-sidebar' },
-    // 个人待办：右侧栏标签，数据按实例保存在 <stateDir>/dsh/todo-list。
-    { id: 'todo-list', name: '@common/todo-list', config: { stateDir: config.stateDir } },
     { id: 'common-brand', name: '@common/brand', config: {
       profile: { ...brandProfile, enabled: config.branding && brand.enabled },
       defaultTheme: '', defaultLocale: brandLocale,
