@@ -15,7 +15,8 @@ export async function prepareHeronAi(options) {
   initializeProductContent({ stateDir: options.stateDir })
   await prepareIntegrationOptions(options)
   // An integration may route this host's personal Provider calls through a model gateway.
-  options.managedModelGateway ||= !!options.modelGatewayUrl
+  options.managedModelGateway = !options.automation && !!(options.modelGatewayUrl ?? process.env.HERON_AI_MODEL_GATEWAY_URL)
+    && options.modelGatewayMode !== 'remote'
   refreshBundledDirectory()
   options.providerCatalogUrl ??= providerCatalogUrl(options.serverUrl)
   const directory = await providerDirectory({ stateDirectory: options.stateDir, catalogUrl: options.providerCatalogUrl }).load()

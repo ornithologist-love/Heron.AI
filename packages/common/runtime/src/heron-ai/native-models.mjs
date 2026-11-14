@@ -4,16 +4,17 @@ import * as PiAi from '@deepseek-ai/dsh-llm-pi-ai'
 export const Config = PiAi.Config
 export const inject = ['llm', 'heronAiAcp', 'settings']
 export function apply(ctx, config) {
-  let lastUser, lastDeployment, current
+  let lastUser, lastDeployment, lastLocal, current
   const declared = config.providers
   // Keep the loader's volatile reference protocol, including updates, while
   // exposing the same resolved routes to the adapter and Settings.describe.
   const providers = Object.create(declared)
   Object.defineProperty(providers, 'get', { value: () => {
-    const user = declared.get(), deployment = ctx.heronAiAcp.routes
-    if (current === undefined || user !== lastUser || deployment !== lastDeployment) {
-      lastUser = user; lastDeployment = deployment
-      current = Object.freeze(ctx.heronAiAcp.modelGateway ? { ...deployment } : { ...user, ...deployment })
+    const user = declared.get(), gateway = ctx.heronAiAcp.modelGateway
+    const deployment = gateway?.isRemoteRequest() ? ctx.heronAiAcp.remoteRoutes : ctx.heronAiAcp.routes
+    if (current === undefined || user !== lastUser || deployment !== lastDeployment || ctx.heronAiAcp.routes !== lastLocal) {
+      lastUser = user; lastDeployment = deployment; lastLocal = ctx.heronAiAcp.routes
+      current = Object.freeze(gateway?.exclusive ? { ...deployment } : { ...user, ...ctx.heronAiAcp.routes, ...deployment })
     }
     return current
   } })

@@ -26,7 +26,7 @@ export async function apply(ctx) {
     try {
       if (url.pathname === '/heron-ai-acp/model-gateway' && req.method === 'GET')
         return reply(200, { enabled: !!ctx.heronAiAcp.modelGateway })
-      if (ctx.heronAiAcp.modelGateway && ['/heron-ai-acp/providers', '/heron-ai-acp/credentials', '/heron-ai-acp/settings', '/heron-ai-acp/public'].includes(url.pathname))
+      if (ctx.heronAiAcp.modelGateway?.isRemoteRequest(req) && ['/heron-ai-acp/providers', '/heron-ai-acp/credentials', '/heron-ai-acp/settings', '/heron-ai-acp/public'].includes(url.pathname))
         return reply(403, { error: '请从统一登录网页入口管理个人 Provider。' })
       if (req.method === 'GET' && url.pathname.startsWith('/heron-ai-acp/ui/')) {
         const root = path.join(ctx.heronAiAcp.options.hostRoot, 'heron-ai', 'ui')

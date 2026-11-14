@@ -101,6 +101,7 @@ class HeronAiSessionPolicy {
     for (const provider of [{ id: 'deepseek-official', name: 'DeepSeek' }, ...ai_provider_definitions]) {
       if (!groups.some(group => group.id === provider.id)) groups.push({ id: provider.id, name: provider.name, models: [] })
     }
-    return { ...catalog, groups }
+    const gateway = this.ctx.heronAiAcp.modelGateway
+    return { ...catalog, groups: gateway?.isRemoteRequest() ? groups.filter(group => gateway.supports(group.id)) : groups }
   }
 }

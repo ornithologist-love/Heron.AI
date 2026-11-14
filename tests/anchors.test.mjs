@@ -6,6 +6,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { hasDocumentFragment } from './support/document-anchors.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const skipped = new Set(['node_modules', '.git', 'dist', '.cache'])
@@ -35,7 +36,7 @@ test('every first-party test file is anchored to an existing document', () => {
       const [document, fragment] = anchor.split('#', 2)
       const target = path.join(root, document)
       if (!fs.existsSync(target)) { problems.push(`${relative}: anchor document missing: ${document}`); continue }
-      if (fragment && !fs.readFileSync(target, 'utf8').includes(fragment))
+      if (fragment && !hasDocumentFragment(fs.readFileSync(target, 'utf8'), fragment))
         problems.push(`${relative}: anchor '${fragment}' not found in ${document}`)
     }
   }

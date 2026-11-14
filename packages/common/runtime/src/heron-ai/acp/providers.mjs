@@ -27,7 +27,8 @@ export const delegatedModelRoutes = catalog => ai_provider_definitions
 
 export async function apply(ctx, config) {
   config = { ...config, credentialRoot: config.credentialRoot ?? config.stateDir }
-  const modelGateway = createModelGateway(ctx, config.automation ? undefined : config.modelGatewayUrl ?? process.env.HERON_AI_MODEL_GATEWAY_URL)
+  const modelGateway = createModelGateway(ctx, config.automation ? undefined : config.modelGatewayUrl ?? process.env.HERON_AI_MODEL_GATEWAY_URL,
+    { allowLocal: config.modelGatewayMode === 'remote' })
   const integrations = new Map(), owners = new Map()
   ctx.effect(() => async () => {
     for (const value of integrations.values()) for (const transport of value.transports.values()) await transport?.close?.()
@@ -73,11 +74,15 @@ export async function apply(ctx, config) {
         ? (actual.loadSession || actual.sessionCapabilities?.resume ? 'native' : 'local')
         : declared.sessions }
     } }
-  let routes = {}
+  let routes = {}, remoteRoutes = {}
   const routeListeners = new Set()
   Object.defineProperty(service, 'routes', { get: () => routes })
+  Object.defineProperty(service, 'remoteRoutes', { get: () => remoteRoutes })
   service.observeRoutes = listener => { routeListeners.add(listener); return () => routeListeners.delete(listener) }
   const dropRoute = id => {
+    modelGateway?.removeProvider(id)
+    const { [id]: removedRemote, ...remainingRemote } = remoteRoutes
+    remoteRoutes = remainingRemote
     if (!Object.hasOwn(routes, id)) return
     const { [id]: removed, ...next } = routes
     routes = next
@@ -89,20 +94,24 @@ export async function apply(ctx, config) {
     const owner = definition.integration ?? owners.get(id)
     if (owner && !integrations.has(owner)) { dropRoute(id); return }
     const custom = service.providerTransport(id)?.modelRoute
-    const catalog = await registry.loadProviderCatalog(id), endpoint = modelGateway ? modelGateway.endpoint(definition, catalog)
+    const catalog = await registry.loadProviderCatalog(id), gatewayEndpoint = modelGateway?.endpoint(definition, catalog)
+    const endpoint = modelGateway?.exclusive ? gatewayEndpoint
       : custom ? { api: custom.api, baseUrl: custom.baseURL } : definition.public ? undefined : registry.endpoint(definition, catalog)
-    if (!endpoint) { dropRoute(id); return }
     const ref = credentialRef('HERON_AI_' + id.toUpperCase() + '_TOKEN')
-    routes = { ...routes, [id]: { displayName: definition.name,
-      ...(modelGateway ? { headers: { Authorization: 'Bearer gateway' } }
+    const profile = (target, gateway) => ({ displayName: definition.name,
+      ...(gateway ? { headers: { Authorization: 'Bearer gateway' } }
         : custom ? { headers: custom.headers, retryPolicy: custom.retryPolicy } : { apiKeyEnv: ref }),
-      api: endpoint.api, baseURL: endpoint.baseUrl, compat: { supportsDeveloperRole: false, ...catalog.compat },
+      api: target.api, baseURL: target.baseUrl, compat: { supportsDeveloperRole: false, ...catalog.compat },
       // A model the channel cannot serve for agent work never becomes a route,
       // so no picker lists it and a saved selection falls back to the default.
       models: catalog.models.filter(model => model.heron_ai_agent_unsupported !== true).map(model => ({ id: model.id, name: model.name,
         contextWindow: model.context_window ?? 131072, maxTokens: model.max_tokens ?? 8192,
         input: model.heron_ai_multimodal ? ['text', 'image'] : ['text'],
-        reasoningEfforts: model.heron_ai_effort?.length ? Object.fromEntries([['off', null], ...model.heron_ai_effort.map(x => [x,x])]) : false })) } }
+        reasoningEfforts: model.heron_ai_effort?.length ? Object.fromEntries([['off', null], ...model.heron_ai_effort.map(x => [x,x])]) : false })) })
+    if (gatewayEndpoint) remoteRoutes = { ...remoteRoutes, [id]: profile(gatewayEndpoint, true) }
+    else { const { [id]: removed, ...remaining } = remoteRoutes; remoteRoutes = remaining }
+    if (!endpoint) { dropRoute(id); return }
+    routes = { ...routes, [id]: profile(endpoint, modelGateway?.exclusive) }
     for (const listener of routeListeners) listener()
   }
   service.registerProviderIntegration = async ({ id, providers, createTransport, startup = false }) => {
@@ -157,7 +166,7 @@ export async function apply(ctx, config) {
     catch { await registry.probe(definition.id) }
   }))
   ctx.on('agent/request-error', async (payload, next) => {
-    if (!modelGateway && is_model_provider(payload.provider) &&
+    if ((!modelGateway || !modelGateway.requiresPersonalGrant(payload.agent.session.id)) && is_model_provider(payload.provider) &&
       (/CREDENTIAL|AUTH/.test(payload.failure?.code ?? '') || isCredentialFailure(payload.failure))) service.requireCredential(payload.provider)
     return next()
   })
