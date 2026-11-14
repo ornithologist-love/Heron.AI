@@ -27,7 +27,7 @@ export const delegatedModelRoutes = catalog => ai_provider_definitions
 
 export async function apply(ctx, config) {
   config = { ...config, credentialRoot: config.credentialRoot ?? config.stateDir }
-  const modelGateway = createModelGateway(ctx, config.automation ? undefined : process.env.HERON_AI_MODEL_GATEWAY_URL)
+  const modelGateway = createModelGateway(ctx, config.automation ? undefined : config.modelGatewayUrl ?? process.env.HERON_AI_MODEL_GATEWAY_URL)
   const integrations = new Map(), owners = new Map()
   ctx.effect(() => async () => {
     for (const value of integrations.values()) for (const transport of value.transports.values()) await transport?.close?.()

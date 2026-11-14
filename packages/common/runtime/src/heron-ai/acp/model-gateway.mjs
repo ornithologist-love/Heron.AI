@@ -6,7 +6,7 @@ export function createModelGateway(ctx, address) {
   if (!address) return undefined
   const url = new URL(address)
   if (!(url.protocol === 'https:' || url.protocol === 'http:' && url.hostname === '127.0.0.1') ||
-    url.username || url.password || url.search || url.hash || url.pathname !== '/api/model-gateway/')
+    url.username || url.password || url.search || url.hash || !url.pathname.endsWith('/api/model-gateway/'))
     throw Error('Invalid model gateway URL')
 
   const incoming = new AsyncLocalStorage()
