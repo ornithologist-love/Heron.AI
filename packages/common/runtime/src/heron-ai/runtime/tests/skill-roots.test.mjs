@@ -1,4 +1,4 @@
-// Anchor: Docs/architecture/ARCHITECTURE.md#4. 数据：载荷只读，状态全在 stateDir
+// Anchor: Docs/architecture/ARCHITECTURE.md#4. 数据边界：运行包只读，状态全在 stateDir
 // Migrated and bundled skills never overwrite what the user already has in the state directory.
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
