@@ -24,13 +24,19 @@ export async function distributionFileContext(source, manifest) {
 }
 
 export function discardDistributionFile(relative, context) {
-  if (context.inspector || /(?:license|licence|copyright|notice|third[-_]?party)/i.test(path.posix.basename(relative))) return false
-  const development = !context.upstream && (
-    /\.d\.(?:ts|mts|cts)$/.test(relative)
-    || (!context.needsTsSource && /^src\/.*\.(?:ts|tsx|mts|cts)$/.test(relative))
+  if (context.inspector || /(?:license|licence|copyright|notice|third[-_]?party|^skill\.md$)/i.test(path.posix.basename(relative))) return false
+  // Markdown below a package root can be a runtime asset (prompt templates, context files), so only root-level
+  // Markdown and well-known non-runtime folders are dropped, and never from DSH's own packages.
+  const development =
+    /\.d\.(?:ts|mts|cts)(?:\.map)?$/i.test(relative)
+    || /\.tsbuildinfo$/i.test(relative)
+    || /\.map$/i.test(relative)
+    || (!context.needsTsSource && /(?<!\.d)\.(?:ts|tsx|mts|cts)$/i.test(relative))
+    || (!context.upstream && (
+      /^(?:demo|demos|docs|test|tests|__tests__|example|examples|benchmark|benchmarks)\//i.test(relative)
+      || /^[^/]+\.md$/i.test(relative)))
     || /^\.(?:yarn|github)\//.test(relative)
     || /^(?:changelog|history|contributing|code_of_conduct)(?:\.[^/]*)?$/i.test(relative)
-    || (context.hasLegalFile && /^readme(?:\.[^/]*)?$/i.test(relative)))
   const windowsX64 = process.platform === 'win32' && process.arch === 'x64'
   const unusedPty = (context.ptyPrebuild && /^(?:third_party\/|build\/Release\/conpty\/)/.test(relative))
     || (context.name === 'node-pty' && (/\.pdb$/i.test(relative)
