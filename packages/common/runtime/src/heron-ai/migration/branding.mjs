@@ -1,33 +1,36 @@
 import fs from 'node:fs/promises'
-import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { createHash } from 'node:crypto'
 import yaml from 'js-yaml'
 import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
-
-const identifiersFile = new URL('./legacy-identifiers.json', import.meta.url)
-const identifiers = existsSync(identifiersFile) ? JSON.parse(readFileSync(identifiersFile, 'utf8')) : {}
+import { legacyIdentity, renameIdentifier } from './legacy-identity.mjs'
 
 const exists = file => fs.lstat(file).then(() => true, error => { if (error.code === 'ENOENT') return false; throw error })
 const hash = value => createHash('sha256').update(value).digest('hex')
 
-// Explicit compatibility reads are confined to this module and its mapping table.
-export async function prepareStateDirectory({ stateDir, home = os.homedir() } = {}) {
+const hasIdentity = identity => identity.stateDirectories.length || identity.chatDirectories.length
+  || identity.stateRenames.length || identity.profilePackages.length || identity.packageFields.length
+  || identity.prefixes.length || Object.keys(identity.identifiers).length
+
+// Every former name comes from the payload's legacy identity descriptor (legacy-identity.mjs); none is known here.
+export async function prepareStateDirectory({ stateDir, home = os.homedir(), identity = legacyIdentity() } = {}) {
   const target = path.join(home, '.heron-ai')
   if (stateDir && path.resolve(stateDir) !== path.resolve(target)) return path.resolve(stateDir)
+  if (!identity.stateDirectories.length && !identity.chatDirectories.length) return target
   return withFileLock(path.join(home, '.heron-ai-migration'), async () => {
-    const previous = path.join(home, '.ksfai')
-    let moved = false
+    let previous
     try {
-    if (!await exists(target) && await exists(previous)) {
+    for (const directory of identity.stateDirectories) {
+      if (await exists(target) || !await exists(path.join(home, directory))) continue
       // Rename is atomic; failure leaves the original state intact and aborts startup.
-      await fs.rename(previous, target)
-      moved = true
+      await fs.rename(path.join(home, directory), target)
+      previous = path.join(home, directory)
     }
-    const legacy = path.join(home, '.dsh-ksf', 'chats')
-    if (await exists(legacy)) {
+    for (const directory of identity.chatDirectories) {
+      const legacy = path.join(home, directory, 'chats')
+      if (!await exists(legacy)) continue
       const copy = async (source, destination) => {
         const stat = await fs.lstat(source)
         if (stat.isSymbolicLink()) throw Error('Legacy chat migration refuses symbolic links')
@@ -47,26 +50,22 @@ export async function prepareStateDirectory({ stateDir, home = os.homedir() } = 
     }
     return target
     } catch (error) {
-      if (moved) await fs.rename(target, previous)
+      if (previous) await fs.rename(target, previous)
       throw error
     }
   }, { waitMs: 30000 })
 }
 
-export function renamedIdentifier(value) {
-  if (typeof value !== 'string') return value
-  if (value.startsWith('ksf-acp-')) return 'heron-ai-acp-' + value.slice(8)
-  if (value.startsWith('preset-ksf-acp-')) return 'preset-heron-ai-acp-' + value.slice(15)
-  return identifiers[value] ?? (value.startsWith('KSFAI_') ? 'HERON_AI_' + value.slice(6)
-    : value.startsWith('KSF_AI_') ? 'HERON_AI_' + value.slice(7)
-    : value.startsWith('KSF_') ? 'HERON_AI_' + value.slice(4) : value)
+export function renamedIdentifier(value, identity = legacyIdentity()) {
+  return renameIdentifier(value, identity)
 }
 
 // Only known product identifiers in configuration are converted. No session log,
 // credential value, user path or arbitrary string prefix is rewritten.
-function configValue(value, field = '') {
+function configValue(identity, value, field = '') {
+  const renamedIdentifier = value => renameIdentifier(value, identity)
   if (typeof value === 'string') return /token|secret|password|apiKey/i.test(field) && !/Env|Ref$/.test(field) ? value : renamedIdentifier(value)
-  if (Array.isArray(value)) return value.map(item => configValue(item, field))
+  if (Array.isArray(value)) return value.map(item => configValue(identity, item, field))
   if (!value || typeof value !== 'object') return value
   if (![Object.prototype, null].includes(Object.getPrototypeOf(value))) return value
   const result = Object.create(null)
@@ -74,12 +73,15 @@ function configValue(value, field = '') {
   for (const [key, item] of Object.entries(value)) {
     const name = renamedIdentifier(key)
     if (key !== name && Object.hasOwn(value, name)) continue
-    result[name] = configValue(item, key)
+    result[name] = configValue(identity, item, key)
   }
   return result
 }
 
-export async function migrateProductSettings(options) {
+export async function migrateProductSettings(options, identity = legacyIdentity()) {
+  if (!hasIdentity(identity)) return
+  const renamedIdentifier = value => renameIdentifier(value, identity)
+  const configValueOf = value => configValue(identity, value)
   await fs.mkdir(options.stateDir, { recursive: true })
   await withFileLock(path.join(options.stateDir, '.heron-ai-identifiers'), async () => {
     const rewrite = async (file, transform, profile = false) => {
@@ -97,7 +99,7 @@ export async function migrateProductSettings(options) {
       await writeFileAtomic(file, json ? JSON.stringify(next, null, 2) + '\n'
         : yaml.dump(next, { schema, noRefs: true, lineWidth: -1 }), { mode: 0o600 })
     }
-    for (const [oldName, newName] of [['dsh/migration/ksf-v1', 'dsh/migration/heron-ai-v1'], ['.agents/.ksf-skills-v2', '.agents/.heron-ai-skills-v2'], ['.agents/inactive-ksf-skills', '.agents/inactive-heron-ai-skills']]) {
+    for (const [oldName, newName] of identity.stateRenames) {
       const source = path.join(options.stateDir, oldName), target = path.join(options.stateDir, newName)
       if (await exists(source) && !await exists(target)) await fs.rename(source, target)
     }
@@ -106,7 +108,7 @@ export async function migrateProductSettings(options) {
       for (const [key, item] of Object.entries(value ?? {})) {
         const name = renamedIdentifier(key)
         if (key !== name && Object.hasOwn(value, name)) continue
-        result[name] = name !== key || ['ui-theme', 'common-brand'].includes(key) ? configValue(item) : item
+        result[name] = name !== key || ['ui-theme', 'common-brand'].includes(key) ? configValueOf(item) : item
       }
       return result
     })
@@ -131,7 +133,7 @@ export async function migrateProductSettings(options) {
         const visit = rows => rows.filter(row => !row.id || renamedIdentifier(row.id) === row.id || !rows.some(other => other.id === renamedIdentifier(row.id))).map(row => ({ ...row,
           ...(row.id && { id: renamedIdentifier(row.id) }),
           ...(row.name && { name: renamedIdentifier(row.name) }),
-          ...(row.config && { config: renamedIdentifier(row.id) !== row.id || ['ui-theme', 'common-brand'].includes(row.id) ? configValue(row.config) : row.config }),
+          ...(row.config && { config: renamedIdentifier(row.id) !== row.id || ['ui-theme', 'common-brand'].includes(row.id) ? configValueOf(row.config) : row.config }),
           ...(row.insert && { insert: visit(row.insert) }),
         }))
         return visit(value)
@@ -141,10 +143,11 @@ export async function migrateProductSettings(options) {
         for (const field of ['dependencies', 'devDependencies']) {
           if (!next[field]) continue
           // Generated profile packages are replaced by launchDsh, not fetched from npm.
-          for (const key of Object.keys(next[field])) if (key === '@ksf/dsh-profile') delete next[field][key]
+          for (const key of Object.keys(next[field])) if (identity.profilePackages.includes(key)) delete next[field][key]
         }
         if (next.dsh?.profile?.bundles) next.dsh.profile.bundles = next.dsh.profile.bundles.map(renamedIdentifier)
-        if (next.ksfai) { next.heronAi ??= next.ksfai; delete next.ksfai }
+        for (const [from, to] of identity.packageFields)
+          if (next[from]) { next[to] ??= next[from]; delete next[from] }
         return next
       })
     }
@@ -153,9 +156,11 @@ export async function migrateProductSettings(options) {
 
 // Old sessions keep their original event bytes and preset identities. Hidden
 // aliases let those sessions resume without rewriting conversation records.
-export const legacyPresetPrefixes = ['ksf-acp-']
-export function legacyPresetAliases(presets) {
-  return presets.map(row => ({ ...row, id: 'legacy-' + row.id,
-    config: { ...row.config, id: legacyPresetPrefixes[0] + row.config.id.slice('heron-ai-acp-'.length) } }))
+export function legacyPresetPrefixes(identity = legacyIdentity()) {
+  return [...identity.presetPrefixes]
 }
-
+export function legacyPresetAliases(presets, identity = legacyIdentity()) {
+  return identity.presetPrefixes.flatMap((prefix, index) => presets.map(row => ({ ...row,
+    id: (index ? `legacy-${index}-` : 'legacy-') + row.id,
+    config: { ...row.config, id: prefix + row.config.id.slice('heron-ai-acp-'.length) } })))
+}

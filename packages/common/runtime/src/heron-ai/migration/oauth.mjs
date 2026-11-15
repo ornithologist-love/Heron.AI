@@ -4,10 +4,19 @@ import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { registerHooks, stripTypeScriptTypes } from 'node:module'
 import { digest, readJson } from './files.mjs'
+import { legacyIdentity } from './legacy-identity.mjs'
 
+// Former installations named by the payload's legacy identity kept credentials behind a pinned reader.
 async function oldCredentialReader(options) {
   if (!options.localRoot) return null
-  const versions = path.join(options.localRoot,'ksf_ai','versions')
+  for (const directory of legacyIdentity().localDirectories) {
+    const reader = await installedCredentialReader(path.join(options.localRoot, directory, 'versions'))
+    if (reader) return reader
+  }
+  return null
+}
+
+async function installedCredentialReader(versions) {
   let folders
   try { folders = await fs.readdir(versions,{ withFileTypes:true }) }
   catch (error) { if (error.code === 'ENOENT') return null; throw error }

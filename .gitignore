@@ -17,4 +17,3 @@ obj/
 # 过程材料（handoff / 计划 / 报告），见 E:/HeronAi/Docs/DOC-GOVERNANCE.md §4
 .work/
 __pycache__/
-/packages/common/runtime/src/heron-ai/migration/legacy-identifiers.json

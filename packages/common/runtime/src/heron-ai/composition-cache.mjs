@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { productProfileFile } from './product-profile.mjs'
 import { integrationFingerprint, integrationConfigurationKey } from './integrations.mjs'
+import { legacyPresetPrefixes } from './migration/branding.mjs'
 
 async function compositionKey(config) {
   const root = path.join(config.hostRoot, 'heron-ai'), files = []
@@ -32,7 +33,7 @@ async function compositionKey(config) {
     providerCatalogSnapshot: config.providerCatalogSnapshot, productProfileSource: productProfileFile.href,
     integrations: await integrationFingerprint(), preferPublicDefault: config.preferPublicDefault, automation: config.automation === true,
     contributedConfiguration: await integrationConfigurationKey(config),
-    includeUserSkillRoots: config.includeUserSkillRoots }))
+    includeUserSkillRoots: config.includeUserSkillRoots, legacyPresetPrefixes: legacyPresetPrefixes() }))
   for (let index = 0; index < files.length; index++) hash.update(files[index]).update('\0').update(bytes[index]).update('\0')
   return hash.digest('hex').slice(0, 24)
 }
