@@ -2,16 +2,18 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Microsoft.Extensions.Logging;
 using Microsoft.Web.WebView2.Core;
 
 namespace HeronAI.Facade;
 
 /// <summary>A host-neutral WebView over HeronAI. Multiple views share one runtime and session state.</summary>
-public sealed class AiProductView : UserControl
+public sealed partial class AiProductView : UserControl
 {
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
     private readonly AiProductRuntime _runtime;
@@ -33,6 +35,9 @@ public sealed class AiProductView : UserControl
     private bool _started;
     private bool _disposed;
     private CoreWebView2? _windowsBrowser;
+    private Window? _ownerWindow;
+    private readonly List<Visual> _visibilityAncestors = [];
+    private CoreWebView2MemoryUsageTargetLevel? _memoryUsageTarget;
     private AiWebViewInputDiagnostics? _inputDiagnostics;
     private TaskCompletionSource<CoreWebView2?> _windowsBrowserReady = NewWindowsBrowserReady();
 
@@ -49,16 +54,74 @@ public sealed class AiProductView : UserControl
         _browser.NavigationCompleted += OnNavigationCompleted;
         _browser.AdapterCreated += OnAdapterCreated;
         _browser.AdapterDestroyed += OnAdapterDestroyed;
+        _browser.PropertyChanged += OnVisibilityPropertyChanged;
         AttachedToVisualTree += (_, _) =>
         {
+            SetOwnerWindow(TopLevel.GetTopLevel(this) as Window);
             if (_started) return;
             _started = true;
             _ = NavigateWhenReadyAsync();
         };
+        DetachedFromVisualTree += (_, _) => SetOwnerWindow(null);
+    }
+
+    private void SetOwnerWindow(Window? window)
+    {
+        if (_ownerWindow != null) _ownerWindow.PropertyChanged -= OnOwnerWindowPropertyChanged;
+        foreach (var ancestor in _visibilityAncestors) ancestor.PropertyChanged -= OnVisibilityPropertyChanged;
+        _visibilityAncestors.Clear();
+        _ownerWindow = window;
+        if (_ownerWindow != null)
+        {
+            _ownerWindow.PropertyChanged += OnOwnerWindowPropertyChanged;
+            _visibilityAncestors.AddRange(_browser.GetVisualAncestors());
+            foreach (var ancestor in _visibilityAncestors) ancestor.PropertyChanged += OnVisibilityPropertyChanged;
+        }
+        UpdateMemoryUsageTarget();
+        UpdateBrowserLifetime();
+    }
+
+    private void OnVisibilityPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
+    {
+        if (args.Property == IsVisibleProperty)
+        {
+            UpdateMemoryUsageTarget();
+            UpdateBrowserLifetime();
+        }
+    }
+
+    private void OnOwnerWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
+    {
+        if (args.Property == Window.WindowStateProperty || args.Property == IsVisibleProperty)
+        {
+            UpdateMemoryUsageTarget();
+            UpdateBrowserLifetime();
+        }
+    }
+
+    private void UpdateMemoryUsageTarget()
+    {
+        if (!OperatingSystem.IsWindows() || _windowsBrowser == null || _disposed) return;
+        var visible = _browser.IsEffectivelyVisible && _ownerWindow is { IsVisible: true }
+            && _ownerWindow.WindowState != WindowState.Minimized;
+        var target = visible ? CoreWebView2MemoryUsageTargetLevel.Normal : CoreWebView2MemoryUsageTargetLevel.Low;
+        if (_memoryUsageTarget == target) return;
+        try
+        {
+            _windowsBrowser.MemoryUsageTargetLevel = target;
+            _memoryUsageTarget = target;
+            _runtime.Logger.LogInformation("AI WebView memory target ViewId={ViewId} View={View} Target={Target}",
+                _viewId, _view ?? "workspace", target);
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException)
+        {
+            _runtime.Logger.LogWarning("AI WebView memory target failed ViewId={ViewId} ErrorType={ErrorType}",
+                _viewId, error.GetType().Name);
+        }
     }
 
     public NativeWebView Browser => _browser;
-    public bool IsReady => _presentationReady.Task.IsCompletedSuccessfully;
+    public bool IsReady => !_browserReleased && !_resumingBrowser && _presentationReady.Task.IsCompletedSuccessfully;
     public event Action? PresentationReady;
     public event Action? LoadStateChanged;
     public bool HasLoadFailed { get; private set; }
@@ -79,6 +142,12 @@ public sealed class AiProductView : UserControl
     }
 
     public async Task<JsonElement> RequestPresentationAsync(string action, object? value = null, CancellationToken token = default)
+    {
+        await EnsureBrowserAsync(token);
+        return await RequestPresentationCoreAsync(action, value, token);
+    }
+
+    private async Task<JsonElement> RequestPresentationCoreAsync(string action, object? value, CancellationToken token)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
@@ -105,6 +174,9 @@ public sealed class AiProductView : UserControl
     {
         // An unopened view will navigate to the current runtime on first attach.
         if (!_started || _disposed) return;
+        if (_releaseBrowserTask != null) await _releaseBrowserTask.WaitAsync(token);
+        if (_browserReleased) return;
+        if (_resumeBrowserTask != null) await _resumeBrowserTask.WaitAsync(token);
         BeginLoading();
         try
         {
@@ -150,6 +222,7 @@ public sealed class AiProductView : UserControl
         var id = Guid.NewGuid().ToString("N");
         try
         {
+            await EnsureBrowserAsync(cancellationToken);
             await _chatTransferGate.WaitAsync(cancellationToken);
             acquired = true;
             await _chatPageReady.Task.WaitAsync(cancellationToken);
@@ -178,6 +251,8 @@ public sealed class AiProductView : UserControl
     public async Task ApplyThemeAsync(string mode)
     {
         if (mode is not ("light" or "dark")) return;
+        _browserTheme = mode;
+        if (_browserReleased) return;
         try { await _browser.InvokeScript($"window.postMessage('heron-ai-theme:{mode}','*')"); }
         catch { }
     }
@@ -256,6 +331,7 @@ public sealed class AiProductView : UserControl
         try
         {
             _windowsBrowser = CoreWebView2.CreateFromComICoreWebView2(pointer);
+            UpdateMemoryUsageTarget();
             _windowsBrowser.NavigationCompleted += OnWindowsNavigationCompleted;
             _windowsBrowser.NewWindowRequested += OnWindowsNewWindowRequested;
             _inputDiagnostics = new AiWebViewInputDiagnostics(_windowsBrowser, _browser, _runtime.Logger, _viewId, _view ?? "workspace");
@@ -282,6 +358,7 @@ public sealed class AiProductView : UserControl
         _inputDiagnostics = null;
         var browser = _windowsBrowser;
         _windowsBrowser = null;
+        _memoryUsageTarget = null;
         if (_disposed) _windowsBrowserReady.TrySetCanceled();
         else
         {
@@ -371,9 +448,11 @@ public sealed class AiProductView : UserControl
                     _readyTimeout = null;
                     HasLoadFailed = false;
                     _presentationReady.TrySetResult();
+                    if (_resumingBrowser) break;
                     if (_manageBrowserVisibility) _browser.IsVisible = true;
                     LoadStateChanged?.Invoke();
                     PresentationReady?.Invoke();
+                    UpdateBrowserLifetime();
                     break;
                 case "heron-ai-presentation-result":
                     if (!root.TryGetProperty("id", out var id) || id.ValueKind != JsonValueKind.String ||
@@ -393,7 +472,13 @@ public sealed class AiProductView : UserControl
     {
         if (_disposed) return;
         _disposed = true;
+        _idleBrowserTimer?.Dispose();
+        _browserLifetime.Cancel();
+        _browserLifetime.Dispose();
+        _browserPresentation = null;
         _readyTimeout?.Dispose();
+        SetOwnerWindow(null);
+        _browser.PropertyChanged -= OnVisibilityPropertyChanged;
         _browser.EnvironmentRequested -= OnEnvironmentRequested;
         _browser.NewWindowRequested -= OnNewWindowRequested;
         _browser.WebMessageReceived -= OnWebMessageReceived;

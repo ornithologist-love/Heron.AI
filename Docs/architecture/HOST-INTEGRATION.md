@@ -122,6 +122,12 @@ Facade 启动 Node 时以 `DSH_EXTERNAL_BROWSER_BRIDGE=stdio-v1` 声明这项可
 
 独立 WebView 由 AI 运行时持有，与 AI 页面共用 WebView2 profile；OAuth 继续使用原有 loopback 回调和令牌处理。授权页请求关闭时关闭对应窗口，AI 重启或退出时关闭其持有的外链窗口，系统浏览器由用户管理。
 
+### H3.4 后台 WebView 内存
+
+Windows Facade 按每个 WebView 的有效可见性及其所属窗口状态管理内存目标：页面隐藏、窗口隐藏或最小化时设为 `Low`，恢复显示时设为 `Normal`。内存回收由 WebView2 尽力执行，目标切换不承诺固定回收量。
+
+主视图与独立会话窗各自计时：连续处于后台五分钟后销毁原生 WebView，Node 与后台 Agent 保持运行；恢复显示或收到显式页面请求时自动重建。回收前通过呈现桥接保存各视图的会话选择与当前语义草稿（含引用），重建后先恢复该视图的快照再宣布就绪，避免读到另一窗口后来保存的草稿。快照只留在宿主内存，不写日志；其他已保存内容继续使用原有浏览器 profile。待发送附件属于浏览器内存资源，有附件或消息提交尚未结算时暂缓回收，避免丢失未发送内容。前台返回会取消本轮空闲计时，恢复与回收操作串行，退出后不再重建。
+
 ## H4 退出协议
 
 **正常退出 = 关闭 stdin。**
@@ -325,6 +331,8 @@ window.heronAiPresentation.request({ id, action, value })
 | --- | --- | --- |
 | `selection` | 无 | 返回完整视图当前 `sessionId`；没有当前会话时**创建临时会话**。不发模型请求，不改草稿 |
 | `open` | `{ sessionId }` | 在目标视图打开该会话，等会话与输入框就绪后确认 |
+| `capture` | 无 | 保存当前视图的选择并刷新文字草稿持久化；有内存附件或在途提交时返回 `canRelease: false` |
+| `restore` | `capture` 返回的状态 | 恢复该视图的会话／子会话，不发送消息、不激活 Agent |
 
 单会话页面通过 `ready.url` 保留认证参数并追加片段 `#heron-ai-view=session`（片段可在 DSH 清理认证 query 的重定向后保留）；已认证页面也接受 `view=session` query。
 
