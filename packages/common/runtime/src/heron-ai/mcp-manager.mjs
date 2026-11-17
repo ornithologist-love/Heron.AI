@@ -6,8 +6,9 @@ import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { contentSources, readMcpConfiguration, registerContentSource } from './product-profile.mjs'
+import { registerMcpToolDiscovery } from './mcp-tool-discovery.mjs'
 
-export const inject = ['connection', 'heronAiAcp', 'appReady']
+export const inject = ['connection', 'heronAiAcp', 'appReady', 'tools']
 export const name = 'heron-ai-mcp-integration'
 
 // A host may serve an endpoint only through its own admitted tools (H2.1
@@ -21,6 +22,7 @@ const listenerAddress = value => {
 }
 
 export async function apply(ctx) {
+  registerMcpToolDiscovery(ctx)
   await migrateConfiguration(ctx.heronAiAcp.options)
   const options = ctx.heronAiAcp.options
   const selected = options.bundledMcpServers
