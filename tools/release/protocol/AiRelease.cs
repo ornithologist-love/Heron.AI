@@ -32,7 +32,7 @@ public sealed record AiRelease
     public Dictionary<string, string> Files { get; init; } = new(StringComparer.Ordinal);
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string[]? Editions { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? Distribution { get; init; }
-    public static bool ValidEdition(string? edition) => edition is "user" or "agent" or "FL";
+    public static bool ValidEdition(string? edition) => edition is "user" or "agent" or "FL" or "eval";
     public bool TargetsEdition(string? edition) => ValidEdition(edition)
         && (Editions?.Contains(edition!, StringComparer.Ordinal) ?? !RequiresDshHost);
     [JsonIgnore] public bool Compatible => Platform == "win-x64" && BridgeMin <= BridgeVersion && BridgeMax >= BridgeVersion;
@@ -58,7 +58,7 @@ public sealed record AiRelease
             Size <= 0 || Size > 2L * 1024 * 1024 * 1024 || UnpackedSize <= 0 || UnpackedSize > 4L * 1024 * 1024 * 1024 ||
             Files == null || !Files.ContainsKey(Archive) || !Files.ContainsKey("releases.win.json") || Files.Count != 2 ||
             Files.Any(pair => !SafeName(pair.Key) || !Regex.IsMatch(pair.Value, "\\A[0-9a-fA-F]{64}\\z"))
-            || Editions != null && (Editions.Length is < 1 or > 3 || Editions.Any(e => !ValidEdition(e))
+            || Editions != null && (Editions.Length is < 1 or > 4 || Editions.Any(e => !ValidEdition(e))
                 || Editions.Distinct(StringComparer.Ordinal).Count() != Editions.Length)
             || Distribution is not (null or "ai" or "bundle")
             || BridgeMin >= BridgeVersion && (Editions == null || Distribution == null))

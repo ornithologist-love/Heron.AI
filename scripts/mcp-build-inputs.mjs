@@ -1,16 +1,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { homedir } from 'node:os'
+import { selectedMcpServers } from './plugin-bundles.mjs'
 
 // Resolve only inputs required by explicitly selected content packages, before
 // assembly changes the output. Never log credential values or copy this file.
-export function readMcpBuildInputs(directories, compositionSecretsFile) {
+export function readMcpBuildInputs(directories, compositionSecretsFile, selections = new Map()) {
   const variables = new Set()
   for (const directory of directories) {
     const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
     const content = manifest.heronAi?.content?.['mcp-config.json']
     if (!content) continue
-    const config = JSON.parse(fs.readFileSync(path.join(directory, content), 'utf8'))
+    // Servers the composition drops need no credential.
+    const config = selectedMcpServers(JSON.parse(fs.readFileSync(path.join(directory, content), 'utf8')),
+      selections.get(path.resolve(directory)))
     for (const server of Object.values(config.mcpServers ?? {}))
       if (server.bearerTokenEnv) variables.add(server.bearerTokenEnv)
   }

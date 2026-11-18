@@ -44,7 +44,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   if (args[0] === '--bundle-manifest' && (!manifest || args.length !== 2)) throw Error('Expected --bundle-manifest <composition.json>')
   const bundle = pluginBundleInputs(manifest, manifest ? [] : args)
   const plugins = bundle.directories
-  const mcp = readMcpBuildInputs(plugins, bundle.mcpSecretsFile)
+  const mcp = readMcpBuildInputs(plugins, bundle.mcpSecretsFile, bundle.selections)
   const files = [...payloadInputs(root), ...sourceInputs(root, ['tools/release'])]
   files.push(...bundle.manifestFiles, ...mcp.files)
   for (const plugin of plugins) {

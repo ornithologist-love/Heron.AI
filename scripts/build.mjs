@@ -11,7 +11,7 @@ import { writeDevelopmentContext } from './plugin-dev-context.mjs'
 import { bundleNode } from './node-runtime.mjs'
 import { buildReceipt } from './build-receipt.mjs'
 import { payloadInputs } from './payload-inputs.mjs'
-import { pluginBundleInputs, bundleFileIncluded } from './plugin-bundles.mjs'
+import { pluginBundleInputs, bundleFileIncluded, selectedFile, selectedMcpServers, dropExcludedLinks } from './plugin-bundles.mjs'
 import { readMcpBuildInputs } from './mcp-build-inputs.mjs'
 import { visibleSourceFiles } from './source-inventory.mjs'
 import { assertPublicPayload } from './public-payload.mjs'
@@ -31,7 +31,7 @@ for (let i = 0; i < args.length; i += 2) {
 }
 const bundle = pluginBundleInputs(options.get('--bundle-manifest'), pluginDirectories)
 const bundledPlugins = bundle.directories
-const mcpBuildInputs = readMcpBuildInputs(bundledPlugins, bundle.mcpSecretsFile)
+const mcpBuildInputs = readMcpBuildInputs(bundledPlugins, bundle.mcpSecretsFile, bundle.selections)
 const output = path.resolve(options.get('--output') ?? path.join(root, 'dist/app'))
 const host = path.join(output, 'AiHost')
 const cache = path.join(root, '.cache')
@@ -160,11 +160,14 @@ async function bundlePlugins(directories) {
     if (names.includes(manifest.name) || existsSync(target)) throw Error('Bundled plugin collides with a product dependency: ' + manifest.name)
     for (const name of Object.keys(manifest.peerDependencies ?? {}))
       if (!existsSync(path.join(host, 'node_modules', name, 'package.json'))) throw Error('Bundled plugin ' + manifest.name + ' needs ' + name + ', which the product does not ship')
+    const selection = bundle.selections.get(path.resolve(directory))
     await fs.cp(directory, target, { recursive: true, filter: file => {
       const stat = lstatSync(file)
       if (stat.isSymbolicLink()) throw Error('Bundled plugin contains a link: ' + file)
-      return bundleFileIncluded(manifest, path.relative(directory, file), stat.isDirectory())
+      const relative = path.relative(directory, file)
+      return bundleFileIncluded(manifest, relative, stat.isDirectory()) && selectedFile(manifest, selection, relative)
     } })
+    dropExcludedLinks(target, selection)
     // Optional content belongs to its package. Only explicitly bundled copies
     // receive assembly credentials; neither the source nor public defaults do.
     const mcpContent = manifest.heronAi?.content?.['mcp-config.json']
@@ -172,7 +175,7 @@ async function bundlePlugins(directories) {
       if (typeof mcpContent !== 'string') throw Error('Invalid bundled MCP content path')
       const file = path.resolve(target, mcpContent)
       if (!within(target, file) || file === target) throw Error('Bundled MCP content is outside its package')
-      const config = JSON.parse(await fs.readFile(file, 'utf8'))
+      const config = selectedMcpServers(JSON.parse(await fs.readFile(file, 'utf8')), selection)
       for (const server of Object.values(config.mcpServers ?? {})) {
         if (!server.bearerTokenEnv) continue
         const token = mcpBuildInputs.tokens.get(server.bearerTokenEnv)
