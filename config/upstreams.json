@@ -21,8 +21,8 @@
       "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
       "remote": "upstream",
       "branch": "master",
-      "upstreamTag": "dsh-v0.2.2-rc.1",
-      "upstreamCommit": "66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db",
+      "upstreamTag": "dsh-v0.2.2-rc.5",
+      "upstreamCommit": "9c2670d3bce5275e0d1610272958121af87787bb",
       "license": "packages/dsh/LICENSE",
       "directory": "packages/dsh"
     },

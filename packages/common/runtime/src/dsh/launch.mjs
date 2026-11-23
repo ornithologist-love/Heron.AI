@@ -1,7 +1,7 @@
 // The official-direct launch shared by the product's hosts. The installed
 // DSH files stay intact; each host supplies its own home and a native Include.
 import fs from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { createRequire, registerHooks } from 'node:module'
@@ -16,9 +16,15 @@ import { providerCatalogUrl } from '../heron-ai/acp/runtime/provider-directory.m
 import { productProfile } from '../heron-ai/product-profile.mjs'
 import { bundledPluginSelection } from '../heron-ai/bundled-plugins.mjs'
 
-const require = createRequire(import.meta.url)
+// Normalize Windows drive-letter casing so Node ESM never loads two instances of
+// @deepseek-ai/dsh-app-boot (whose bootstrapIncludes WeakMap is module-private).
+const canonicalPath = file => {
+  try { return realpathSync.native(file) }
+  catch { return path.resolve(file) }
+}
 const PRODUCT_BUNDLE = '@heron-ai/dsh-profile'
-const hostRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const hostRoot = canonicalPath(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'))
+const require = createRequire(path.join(hostRoot, 'package.json'))
 // Plugins the release build shipped preinstalled (build.mjs --bundle-plugin) join the
 // product's optional bundles: turned on once per profile, switchable on the plugin page.
 const shippedBundles = (() => {
@@ -33,7 +39,7 @@ if (shippedBundles.length) {
     shippedBundles.some(name => specifier === name || specifier.startsWith(name + '/'))
       ? next(specifier, { ...context, parentURL }) : next(specifier, context) })
 }
-export const DSH_VERSION = '0.2.2-rc.1'
+export const DSH_VERSION = '0.2.2-rc.5'
 // The model server every host defaults to comes from the deployment's product profile;
 // --server-url overrides it. A payload without a profile has no default server.
 export const DEFAULT_SERVER_URL = productProfile.serverUrl ?? null
@@ -157,7 +163,7 @@ export async function launchDsh(options, include) {
   const manifest = require('@deepseek-ai/dsh/package.json')
   if (manifest.version !== DSH_VERSION) throw new Error('The pinned DSH runtime is required')
   await fs.mkdir(options.home, { recursive: true })
-  const { initProfile, resolveProfileDir } = await import('@deepseek-ai/dsh-app-boot')
+  const { initProfile, resolveProfileDir } = await import(pathToFileURL(canonicalPath(require.resolve('@deepseek-ai/dsh-app-boot'))).href)
   const profileDir = resolveProfileDir('web', options.home)
   initProfile(profileDir, ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'])
   const overlay = path.join(options.home, 'heron-ai-host.patch.json')
@@ -249,7 +255,7 @@ export async function launchDsh(options, include) {
   process.env.DSH_HOME = options.home
   process.env.HERON_AI_DSH_LAUNCH = JSON.stringify(options)
   process.chdir(options.workspace)
-  const cli = path.join(path.dirname(require.resolve('@deepseek-ai/dsh/package.json')), 'lib', 'bin.js')
+  const cli = canonicalPath(path.join(path.dirname(require.resolve('@deepseek-ai/dsh/package.json')), 'lib', 'bin.js'))
   process.argv = [process.execPath, cli, '--profile', 'web', '--patch', overlay,
     '--no-open', '--host', '127.0.0.1', '--port', String(options.port)]
   const { runCli } = await import(pathToFileURL(cli).href)

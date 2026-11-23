@@ -8,6 +8,7 @@ const excluded = new Set([
   '@deepseek-ai/dsh-deepseek-account',
   '@deepseek-ai/dsh-deepseek-account-platform',
   '@deepseek-ai/dsh-llm-deepseek-account',
+  '@deepseek-ai/dsh-web-deepseek-api',
   // Better Sidebar tree-shakes its SI/VSC icons into the client bundles.
   'react-icons',
 ])
