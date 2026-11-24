@@ -220,6 +220,9 @@ export async function launchDsh(options, include) {
   const deployment = [
     { id: 'llm-pi-ai', disabled: true },
     { id: 'web', disabled: true },
+    // DSH 0.2.2-rc.5 ships @deepseek-ai/dsh-mcp-manager under service "mcpManager" without OAuth or Settings UI;
+    // keep it disabled so Heron.AI's community dsh-mcp-manager owns the service and /mcp-manager routes.
+    { id: 'mcp-manager', disabled: true },
     // The product layer itself stays selected; the plugin page shows it read-only.
     { id: 'plugin-manager', config: { protectedBundles: [PRODUCT_BUNDLE, ...options.hostPackageBundle ? [options.hostPackageBundle] : []] } },
     { id: 'ui-schedule', disabled: true },

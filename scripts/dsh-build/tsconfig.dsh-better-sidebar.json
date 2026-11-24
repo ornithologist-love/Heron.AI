@@ -4,6 +4,11 @@
     "rootDir": "../../packages/community/dsh-better-sidebar/src",
     "outDir": "../../packages/community/dsh-better-sidebar/lib/types",
     "preserveSymlinks": false,
+    "paths": {
+      "@deepseek-ai/dsh-client-ui-slots": [
+        "../../node_modules/@deepseek-ai/dsh-client-ui-slots"
+      ]
+    },
     "typeRoots": ["../../node_modules/@types"],
     "ignoreDeprecations": "6.0",
     "noUncheckedSideEffectImports": false,
