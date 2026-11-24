@@ -22,7 +22,7 @@ try {
   // Host-only launch facts (identity, model catalog, MCP product) come from the host package.
   if (options.hostPackage) (await import(options.hostPackage)).prepareOptions?.(options)
   await prepareAspectOptions(options)
-  options.brandLogo ??= path.join(content, 'runtime-logo.svg')
+  options.brandLogo ??= path.join(content, 'runtime-logo.png')
   const include = await prepareHeronAi(options)
   process.stderr.write(`[heron-ai-dsh] preparation ${Date.now() - options.startupStartedAt}ms\n`)
   await launchDsh(options, include)

@@ -46,11 +46,14 @@ async function buildComposition(config, extensions) {
   // Aspects may add brand marks for their model channels; a colored mark renders as an image, not a mask.
   const brands = heronAi.brands ?? []
   const icons = {}
-  for (const [id, file, mime] of [['heronAi', 'runtime-logo.svg', 'image/svg+xml'],
+  for (const [id, file, mime] of [['heronAi', 'runtime-logo.png', 'image/png'],
     ...['claude', 'deepseek', 'google', 'minimax', 'kimi', 'openai', 'hunyuan', 'zhipuai', 'xiaomi']
       .map(id => [id, `model-logos/${id}.svg`, 'image/svg+xml'])]) {
     const asset = id === 'heronAi' && config.brandLogo ? config.brandLogo : path.join(pluginRoot, 'assets', file)
-    const type = id === 'heronAi' && path.extname(asset).toLowerCase() === '.png' ? 'image/png' : mime
+    const ext = path.extname(asset).toLowerCase()
+    const type = id === 'heronAi'
+      ? (ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : mime)
+      : mime
     icons[id] = `data:${type};base64,${(await fs.readFile(asset)).toString('base64')}`
   }
   for (const brand of brands) icons[brand.id] = `data:${brand.mime};base64,${(await fs.readFile(brand.file)).toString('base64')}`

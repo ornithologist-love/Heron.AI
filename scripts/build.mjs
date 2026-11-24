@@ -212,7 +212,7 @@ async function removeOrphans(directory) {
       await removeOrphans(file)
       if (!(await fs.readdir(file)).length) await fs.rmdir(file)
     }
-    else if (!keep.has(path.relative(host, file)) && relative !== 'heron-ai/content/runtime-logo.svg') await fs.unlink(file)
+    else if (!keep.has(path.relative(host, file)) && relative !== 'heron-ai/content/runtime-logo.png') await fs.unlink(file)
   }
 }
 await stage('remove-orphans', () => removeOrphans(host))
@@ -235,7 +235,7 @@ const frontend = path.join(path.dirname(require.resolve('@deepseek-ai/dsh-web-fr
 await stage('mirror-web', () => mirror(frontend, path.join(host, 'dsh/web')))
 await stage('mirror-ui', () => mirror(path.join(cache, 'ui'), path.join(host, 'heron-ai/ui'), { sourceMaps: true }))
 await stage('mirror-assets', () => mirror(path.join(product, 'assets'), path.join(host, 'heron-ai/assets')))
-await fs.copyFile(path.join(product, 'assets/runtime-logo.svg'), path.join(host, 'heron-ai/content/runtime-logo.svg'))
+await fs.copyFile(path.join(product, 'assets/runtime-logo.png'), path.join(host, 'heron-ai/content/runtime-logo.png'))
 await stage('prune-distribution', () => node(path.join(root, 'scripts/prune-distribution.mjs'), [host]))
 await stage('bundle-plugins', () => bundlePlugins(bundledPlugins))
 await stage('plugin-development-context', () => writeDevelopmentContext(host, path.join(web, 'src')))

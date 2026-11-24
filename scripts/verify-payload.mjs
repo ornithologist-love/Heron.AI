@@ -152,7 +152,7 @@ for (const retired of ['server.mjs', 'admission-store.mjs', 'session-store.mjs',
 if (missing.length) report.push(`AI 功能包缺少模块（Node 启动会 ERR_MODULE_NOT_FOUND）：\n  ${missing.join('\n  ')}`)
 if (errors.length) report.push(`AI 功能包校验失败：\n  ${errors.join('\n  ')}`)
 
-const required = ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'main.mjs', 'dsh/launch.mjs', 'heron-ai/index.mjs', 'heron-ai/ui/widgets.js', 'dsh/web/index.html', 'heron-ai/content/templates/index.json', 'heron-ai/content/mcp-config.json', 'heron-ai/content/runtime-logo.svg', 'heron-ai/content/product.json', 'heron-ai/content/provider-catalog.json']
+const required = ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'main.mjs', 'dsh/launch.mjs', 'heron-ai/index.mjs', 'heron-ai/ui/widgets.js', 'dsh/web/index.html', 'heron-ai/content/templates/index.json', 'heron-ai/content/mcp-config.json', 'heron-ai/content/runtime-logo.png', 'heron-ai/content/product.json', 'heron-ai/content/provider-catalog.json']
 for (const file of required)
   if (!fs.existsSync(path.join(hostRoot, file))) report.push(`AI 功能包缺少 ${file}`)
 try {

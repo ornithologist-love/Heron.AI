@@ -1,3 +1,19 @@
 <Application xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:theme="clr-namespace:Avalonia.Themes.Fluent;assembly=Avalonia.Themes.Fluent" x:Class="HeronAI.App.App">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Default">
+          <SolidColorBrush x:Key="BgSurfaceBrush">#FFFFFF</SolidColorBrush>
+          <SolidColorBrush x:Key="BorderDefaultBrush">#D6DCE5</SolidColorBrush>
+          <SolidColorBrush x:Key="FgDefaultBrush">#18181B</SolidColorBrush>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <SolidColorBrush x:Key="BgSurfaceBrush">#1F2329</SolidColorBrush>
+          <SolidColorBrush x:Key="BorderDefaultBrush">#343A46</SolidColorBrush>
+          <SolidColorBrush x:Key="FgDefaultBrush">#F4F4F5</SolidColorBrush>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
   <Application.Styles><theme:FluentTheme /></Application.Styles>
 </Application>
