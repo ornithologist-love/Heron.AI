@@ -1,8 +1,8 @@
 import z from '@deepseek-ai/schemastery';
 
 // Neutral defaults: the consuming product passes its own profile.
-const NEUTRAL_PROFILE = {enabled: false, label: '', logo: '', monochrome: false, title: 'Heron.AI', subtitle: '', harnessMark: true,
-  heroMarkSize: 0, modelNameOnly: false, tokens: null, language: null};
+const NEUTRAL_PROFILE = {enabled: false, label: '', logo: '', monochrome: false, title: 'Heron', subtitle: '',
+  heroMarkSize: 84, modelNameOnly: false, tokens: null, language: null};
 
 // Native settings propagate accepted profile edits to all connected browsers.
 export const Config = z.object({
@@ -13,7 +13,6 @@ export const Config = z.object({
     monochrome: z.boolean().default(false),
     title: z.string().default(''),
     subtitle: z.string().default(''),
-    harnessMark: z.boolean().default(true),
     // Empty-state mark size with the title and subtitle beneath it; 0 keeps the native headline mark.
     heroMarkSize: z.number().default(0),
     // Composer model caption shows the model name without its provider.

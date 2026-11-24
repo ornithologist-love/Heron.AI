@@ -114,8 +114,8 @@ async function buildComposition(config, extensions) {
   const host = config.hostPackage
     ? await (await import(config.hostPackage)).compose(config, { logo: icons.heronAi })
     : { rows: [], brand: undefined, externalTheme: undefined }
-  const brand = host.brand ?? { enabled: config.branding, label: 'Heron.AI', logo: icons.heronAi, monochrome: false,
-    title: 'Heron.AI', subtitle: '', harnessMark: true, tokens: null, language: null }
+  const brand = host.brand ?? { enabled: config.branding, label: 'Heron', logo: icons.heronAi, monochrome: false,
+    title: 'Heron', subtitle: '', heroMarkSize: 84, tokens: null, language: null }
   // A host brand may name the wording its users start with; the profile itself stays presentation.
   const { defaultLocale: brandLocale = 'zh', ...brandProfile } = brand
 

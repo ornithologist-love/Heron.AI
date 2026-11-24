@@ -2,7 +2,6 @@ window.__ModuleLoader__.load({
   id: '@common/brand',
   factory: (require) => {
     const React = require('react');
-    const {FishLogo} = require('@deepseek-ai/dsh-client-ui-primitives');
     const h = React.createElement;
     const inject = ['slots', 'theme', 'locale', 'configForms'];
     function apply(ctx) {
@@ -33,33 +32,27 @@ window.__ModuleLoader__.load({
           : h('img', {src: value.logo, alt: value.label, width: size, height: size,
             style: {...style, objectFit: 'contain'}});
       }
-      const row = size => ({display: 'inline-flex', alignItems: 'center', gap: size * .4});
-      function Harness({size}) {
-        return h('span', {style: row(size)},
-          h('span', {'aria-hidden': true, style: {fontSize: size * .65, lineHeight: 1, opacity: .55}}, '×'),
-          h(FishLogo, {size}));
-      }
+      const brandFont = "'Montserrat', var(--dsw-font-sans, sans-serif)";
       function Mark({size = 28, className}) {
         return h('span', {className}, h(Logo, {size, value: useProfile()}));
       }
       function Name() {
         const value = useProfile();
         return h('span', {style: {display: 'inline-flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap'}},
-          value.title && h('strong', {style: {fontSize: 16, letterSpacing: 1}}, value.title),
-          value.subtitle && h('span', {style: {fontSize: 10, letterSpacing: 2, color: 'var(--dsw-alias-label-tertiary)'}}, value.subtitle),
-          value.harnessMark && h(Harness, {size: 24}));
+          value.title && h('span', {style: {fontFamily: brandFont, fontSize: 15, fontWeight: 600,
+            letterSpacing: '0.02em', color: 'var(--dsw-alias-label-primary)'}}, value.title),
+          value.subtitle && h('span', {style: {fontSize: 10, letterSpacing: 2, color: 'var(--dsw-alias-label-tertiary)'}}, value.subtitle));
       }
       function HeroMark({size = 28, className}) {
         const value = useProfile();
-        // A large mark stacks the brand name beneath it, as a host's hero empty state does.
-        if (value.heroMarkSize > 0) return h('span', {style: {display: 'flex', flexDirection: 'column', alignItems: 'center',
-          textAlign: 'center', padding: '16px 12px 28px', color: 'var(--dsw-alias-label-primary)'}},
-          h(Logo, {size: value.heroMarkSize, value}),
-          value.title && h('span', {style: {fontSize: 28, fontWeight: 600, letterSpacing: 3, lineHeight: '38px', marginTop: 6}}, value.title),
+        const heroSize = value.heroMarkSize > 0 ? value.heroMarkSize : 84;
+        return h('span', {className, style: {display: 'flex', flexDirection: 'column', alignItems: 'center',
+          textAlign: 'center', padding: '12px 12px 24px', color: 'var(--dsw-alias-label-primary)'}},
+          h(Logo, {size: heroSize, value}),
+          value.title && h('span', {style: {fontFamily: brandFont, fontSize: 24, fontWeight: 600,
+            letterSpacing: '0.04em', lineHeight: '32px', marginTop: 10}}, value.title),
           value.subtitle && h('span', {style: {fontSize: 9, fontWeight: 500, letterSpacing: 6, lineHeight: '18px', marginTop: 4,
             paddingLeft: 6, color: 'var(--dsw-alias-label-secondary)'}}, value.subtitle));
-        return h('span', {className, style: row(size)}, h(Logo, {size, value}),
-          value.harnessMark && h(Harness, {size}));
       }
       const ModelName = ({model}) => model.name;
 
