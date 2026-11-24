@@ -40,9 +40,6 @@ importers:
       '@common/capabilities':
         specifier: workspace:*
         version: link:packages/common/capabilities
-      '@common/image-viewer':
-        specifier: workspace:*
-        version: link:packages/common/image-viewer
       '@common/runtime':
         specifier: workspace:*
         version: link:packages/common/runtime
@@ -230,8 +227,6 @@ importers:
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
 
-  packages/common/image-viewer: {}
-
   packages/common/runtime:
     dependencies:
       '@common/brand':
@@ -240,9 +235,6 @@ importers:
       '@common/capabilities':
         specifier: workspace:*
         version: link:../capabilities
-      '@common/image-viewer':
-        specifier: workspace:*
-        version: link:../image-viewer
       '@common/toolbar':
         specifier: workspace:*
         version: link:../toolbar

@@ -123,7 +123,6 @@ async function buildComposition(config, extensions) {
       enabled: config.heronAiThemes !== false, external: host.externalTheme ?? null,
     } },
     { id: 'heron-ai', name: manifest.name, config },
-    { id: 'common-image-viewer', name: '@common/image-viewer' },
     { id: 'common-context', name: manifest.name + '/context', config: {
       text: '你是 Heron.AI，使用当前模型与已接入的工具帮助用户完成任务。项目背景和生产规范以当前工作区的 Skills 与资料为准；连接状态与可用能力以当前宿主信息和实际工具为准。',
     } },
