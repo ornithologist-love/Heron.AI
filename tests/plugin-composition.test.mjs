@@ -6,6 +6,20 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { pluginBundleInputs, selectedFile, selectedMcpServers, dropExcludedLinks } from '../scripts/plugin-bundles.mjs'
+import { bundledPluginSelection } from '../packages/common/runtime/src/heron-ai/bundled-plugins.mjs'
+
+test('a new payload default is selected once and preserves a later disable', () => {
+  const shipped = ['fixture-bundle']
+  const initial = bundledPluginSelection({}, shipped)
+  assert.ok(initial.bundles.includes(shipped[0]))
+
+  const disabledProfile = {
+    dsh: { profile: { bundles: initial.bundles.filter(name => name !== shipped[0]) } },
+    heronAi: initial.metadata,
+  }
+  const next = bundledPluginSelection(disabledProfile, shipped)
+  assert.deepEqual(next.bundles, disabledProfile.dsh.profile.bundles)
+})
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'heron-composition-'))

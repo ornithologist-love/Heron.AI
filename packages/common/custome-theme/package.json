@@ -1,0 +1,35 @@
+{
+  "name": "custome-theme",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "自定义主题，提供本地字体、跨平台等宽排版及浅色和深色样式。",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./client.js",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.mjs",
+    "client.js",
+    "cordis.patch.yml",
+    "icon.svg",
+    "assets",
+    "README.md"
+  ],
+  "dsh": {
+    "manifestVersion": 1,
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "theme"
+      ]
+    }
+  }
+}

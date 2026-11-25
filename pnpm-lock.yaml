@@ -227,6 +227,8 @@ importers:
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
 
+  packages/common/custome-theme: {}
+
   packages/common/mcp-manager:
     dependencies:
       '@deepseek-ai/cordis':
@@ -1092,6 +1094,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.32.1
         version: 1.32.1(supports-color@9.4.0)(zod@4.6.6)
+      custome-theme:
+        specifier: workspace:*
+        version: link:../custome-theme
       dsh-better-sidebar:
         specifier: workspace:*
         version: link:../../community/dsh-better-sidebar

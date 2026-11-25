@@ -10,6 +10,7 @@
   "dependencies": {
     "@deepseek-ai/dsh": "0.2.2-rc.5",
     "@modelcontextprotocol/sdk": "1.32.1",
+    "custome-theme": "workspace:*",
     "dsh-mcp-manager": "0.6.0",
     "dsh-skill-manager": "0.3.2",
     "ws": "^8.18.0",

@@ -14,7 +14,7 @@ import { findBrowserLoopbackPort } from './browser-port.mjs'
 import { HERON_AI_THEMES } from '../heron-ai/themes/palettes.mjs'
 import { providerCatalogUrl } from '../heron-ai/acp/runtime/provider-directory.mjs'
 import { productProfile } from '../heron-ai/product-profile.mjs'
-import { bundledPluginSelection } from '../heron-ai/bundled-plugins.mjs'
+import { bundledPluginSelection, PRODUCT_BUNDLES } from '../heron-ai/bundled-plugins.mjs'
 
 // Normalize Windows drive-letter casing so Node ESM never loads two instances of
 // @deepseek-ai/dsh-app-boot (whose bootstrapIncludes WeakMap is module-private).
@@ -31,14 +31,13 @@ const shippedBundles = (() => {
   try { return JSON.parse(readFileSync(path.join(hostRoot, 'heron-ai', 'content', 'bundled-plugins.json'), 'utf8')) }
   catch (error) { if (error.code === 'ENOENT') return []; throw error }
 })()
-// DSH imports bundle rows from the profile directory, which has no node_modules for a shipped
-// plugin; its package and subpaths resolve from this payload, like packageNamedRows below.
-if (shippedBundles.length) {
-  const parentURL = pathToFileURL(path.join(hostRoot, 'package.json')).href
-  registerHooks({ resolve: (specifier, context, next) =>
-    shippedBundles.some(name => specifier === name || specifier.startsWith(name + '/'))
-      ? next(specifier, { ...context, parentURL }) : next(specifier, context) })
-}
+// DSH imports bundle rows from the profile directory. Packages supplied by
+// this payload resolve from the installation while selection remains profile-owned.
+const payloadBundles = [...PRODUCT_BUNDLES, ...shippedBundles]
+const payloadParentURL = pathToFileURL(path.join(hostRoot, 'package.json')).href
+registerHooks({ resolve: (specifier, context, next) =>
+  payloadBundles.some(name => specifier === name || specifier.startsWith(name + '/'))
+    ? next(specifier, { ...context, parentURL: payloadParentURL }) : next(specifier, context) })
 export const DSH_VERSION = '0.2.2-rc.5'
 // The model server every host defaults to comes from the deployment's product profile;
 // --server-url overrides it. A payload without a profile has no default server.
@@ -280,7 +279,7 @@ async function hmrWatchRoots(host, include, profileDir) {
     }
   }
   await packages(path.join(host, 'node_modules'), ['@deepseek-ai', '@common', '@heron-ai', '@host',
-    'dsh-mcp-manager', 'dsh-skill-manager', 'dsh-better-sidebar'])
+    'dsh-mcp-manager', 'dsh-skill-manager', 'dsh-better-sidebar', ...PRODUCT_BUNDLES])
   await packages(path.join(profileDir, 'node_modules'))
   const roots = new Map()
   for (const candidate of candidates) {
