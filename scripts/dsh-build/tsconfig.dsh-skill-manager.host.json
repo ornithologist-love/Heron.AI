@@ -13,8 +13,8 @@
     "sourceMap": true,
     "declarationMap": true,
     "preserveSymlinks": true,
-    "rootDir": "../../packages/community/dsh-skill-manager/src",
-    "outDir": "../../packages/community/dsh-skill-manager/lib/types",
+    "rootDir": "../../packages/common/skill-manager/src",
+    "outDir": "../../packages/common/skill-manager/lib/types",
     "typeRoots": [
       "../../node_modules/@types"
     ],
@@ -32,6 +32,6 @@
     "**/*.spec.*"
   ],
   "files": [
-    "../../packages/community/dsh-skill-manager/src/index.ts"
+    "../../packages/common/skill-manager/src/index.ts"
   ]
 }

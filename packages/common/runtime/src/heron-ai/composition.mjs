@@ -15,9 +15,9 @@ import { entryListSchema } from '@deepseek-ai/cordis-plugin-include'
 
 // Skill roots of other agent tools in the user's home, listed in 技能管理 under their tool's name.
 const homeSkillRoots = [
-  { provider: 'heron-ai-home-agents', folder: '.agents', label: 'Agents' },
-  { provider: 'heron-ai-home-claude', folder: '.claude', label: 'Claude Code' },
-  { provider: 'heron-ai-home-codex', folder: '.codex', label: 'Codex' },
+  { id: 'claude-code', provider: 'heron-ai-home-claude', folder: '.claude', label: 'Claude Code', hint: '来自 ~/.claude/skills — 只读', order: 20 },
+  { id: 'codex', provider: 'heron-ai-home-codex', folder: '.codex', label: 'Codex', hint: '来自 ~/.codex/skills — 只读', order: 30 },
+  { id: 'common-agent', provider: 'heron-ai-home-agents', folder: '.agents', label: 'Common Agent', hint: '来自 ~/.agents/skills — 只读', order: 40 },
 ]
 
 // HeronAI owns product inputs and its own plugin composition.
@@ -119,6 +119,22 @@ async function buildComposition(config, extensions) {
   // A host brand may name the wording its users start with; the profile itself stays presentation.
   const { defaultLocale: brandLocale = 'zh', ...brandProfile } = brand
 
+  const readOnlySkillSources = config.includeUserSkillRoots !== false
+    ? homeSkillRoots.map(({ provider, folder }) => ({ provider, directory: path.join(os.homedir(), folder, 'skills') })) : []
+  const skillSections = [
+    ...heronAi.skillSections,
+    ...heronAi.skillGroupLabels
+      .filter(({ prefix }) => !heronAi.skillSections.some(section => section.matchPrefixes?.includes(prefix)))
+      .map(({ prefix, label }) => ({ id: prefix, title: label, hint: `${label}技能 — 只读`, matchPrefixes: [prefix], order: 15 })),
+    ...homeSkillRoots.map(({ id, provider, label, hint, order }) => ({
+      id,
+      title: label,
+      hint,
+      matchPrefixes: [provider],
+      order,
+    })),
+    { id: 'dsh', title: 'DSH', hint: 'DSH 默认与内置技能 — 只读', matchPrefixes: ['standard', 'heron-ai-bundled', 'heron-ai-acp-'], order: 50 },
+  ]
   const rows = [
     { id: 'heron-ai-provider-web', name: manifest.name + '/web', config: { searchProvider: 'deepseek-official', fetchProvider: 'http' } },
     { id: 'heron-ai-client-modules', name: '@deepseek-ai/dsh-client-modules', config: { sourceMaps: false } },
@@ -157,12 +173,16 @@ async function buildComposition(config, extensions) {
       hiddenProviders: ai_provider_definitions.filter(provider => provider.public).map(provider => provider.id),
       providerEditorLayouts: { 'heron-ai-llm-pi-ai': 'pi-ai' },
       providerIcons: Object.fromEntries(['deepseek-official', 'deepseek-account', ...ai_provider_definitions.map(provider => provider.id)].map(id => [id, modelIcons[id]])) } },
-    { id: 'heron-ai-skill-manager', name: 'dsh-skill-manager', config: { presetGroupLabels: [...heronAi.skillGroupLabels, { prefix: 'heron-ai-acp-', label: 'Runtime' }, { prefix: 'heron-ai-bundled', label: '内置' }, ...homeSkillRoots.map(({ provider, label }) => ({ prefix: provider, label }))] } },
+    { id: 'heron-ai-skill-manager', name: 'dsh-skill-manager', config: {
+      presetGroupLabels: [...heronAi.skillGroupLabels, { prefix: 'standard', label: 'DSH' }, { prefix: 'heron-ai-acp-', label: 'DSH' }, { prefix: 'heron-ai-bundled', label: 'DSH' }, ...homeSkillRoots.map(({ provider, label }) => ({ prefix: provider, label }))],
+      sections: skillSections,
+      readOnlySources: readOnlySkillSources,
+    } },
     { id: 'heron-ai-skills', name: '@deepseek-ai/dsh-skill-filesystem', config: { providerName: 'heron-ai-bundled', includeDefaultRoots: false, bundledSkillDir: config.skillsDir,
       customSkillDirs: userSkillRoots(config.stateDir, false) } },
     // The user's own skills get one read-only provider per agent tool, so 技能管理 groups them by origin instead of as Heron.AI's.
-    ...config.includeUserSkillRoots !== false ? homeSkillRoots.map(({ provider, folder }) => ({ id: provider + '-skills', name: '@deepseek-ai/dsh-skill-filesystem',
-      config: { providerName: provider, includeDefaultRoots: false, customSkillDirs: [path.join(os.homedir(), folder, 'skills')] } })) : [],
+    ...readOnlySkillSources.map(({ provider, directory }) => ({ id: provider + '-skills', name: '@deepseek-ai/dsh-skill-filesystem',
+      config: { providerName: provider, includeDefaultRoots: false, customSkillDirs: [directory] } })),
   ]
   // Copies resolve against a cached dependency directory. Keep installed
   // packages read-only; link dependencies only after all overrides are written.

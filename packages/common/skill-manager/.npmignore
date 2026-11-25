@@ -1,0 +1,4 @@
+# Build cache and sourcemaps carry machine-local paths; keep them out of the
+# published tarball (lib/ is published, these files are not).
+*.tsbuildinfo
+*.js.map

@@ -7,8 +7,8 @@ The source distribution retains these upstream licenses:
 | Component | License | Original notice |
 | --- | --- | --- |
 | DeepSeek Harness and its separately licensed components | MIT and component-specific notices | [DSH license](packages/dsh/LICENSE); retain notices within that submodule |
-| DSH MCP Manager | MIT | [License](packages/community/dsh-mcp-manager/LICENSE) |
-| DSH Skill Manager | MIT | [License](packages/community/dsh-skill-manager/LICENSE) |
+| DSH MCP Manager | MIT | [License](packages/common/mcp-manager/LICENSE) |
+| DSH Skill Manager | MIT | [License](packages/common/skill-manager/LICENSE) |
 | DSH Better Sidebar | MIT | [License](packages/community/dsh-better-sidebar/LICENSE) |
 | Model icons from LobeHub | MIT | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.lobe-icons) |
 | Xiaomi icon from Simple Icons | CC0 1.0 | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.simple-icons) |

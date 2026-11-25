@@ -1,0 +1,28 @@
+.idea/
+
+# Dependencies
+node_modules/
+
+# Generated lib/ is not committed; run the build after cloning.
+/lib/
+*.tsbuildinfo
+
+# tsdown.client.ts imports the platform module list from build/web/src —
+# that one file is checked in (build scaffold); other build output stays ignored.
+build/*
+!build/web/
+build/web/*
+!build/web/src/
+build/web/src/*
+!build/web/src/platform.ts
+
+# Logs and editor noise
+*.log
+.DS_Store
+
+# Intermediate JavaScript used by the standard source build.
+/lib/types/**/*.js
+/lib/types/**/*.js.map
+
+# Local build receipts.
+*-fork.json

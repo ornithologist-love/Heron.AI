@@ -1,6 +1,6 @@
 # Heron.AI 本地开发
 
-环境与固定依赖由本仓维护。DSH、MCP 管理器、技能管理器与 BSB 是四个独立子模块，来源和许可证见[依赖来源](Docs/guides/dependencies.md)。
+环境与固定依赖由本仓维护。DSH 与 BSB 是两个独立子模块（`packages/common/mcp-manager` 与 `packages/common/skill-manager` 直接在仓内源码维护），来源和许可证见[依赖来源](Docs/guides/dependencies.md)。
 
 ## 拉取与启动
 

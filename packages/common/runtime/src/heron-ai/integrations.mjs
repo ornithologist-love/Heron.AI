@@ -50,10 +50,10 @@ export async function integrationConfigurationKey(options) {
 }
 
 export async function composeIntegrations(options) {
-  const merged = { rows: [], brands: [], providerNotices: [], providerSignIn: {}, clientPackages: [], skillGroupLabels: [] }
+  const merged = { rows: [], brands: [], providerNotices: [], providerSignIn: {}, clientPackages: [], skillGroupLabels: [], skillSections: [] }
   for (const { root, module } of await productIntegrations()) {
     const value = await module.compose?.(options) ?? {}
-    for (const key of ['rows', 'brands', 'providerNotices', 'skillGroupLabels']) merged[key].push(...value[key] ?? [])
+    for (const key of ['rows', 'brands', 'providerNotices', 'skillGroupLabels', 'skillSections']) merged[key].push(...value[key] ?? [])
     for (const directory of value.clientPackages ?? []) {
       const file = path.resolve(directory), below = path.relative(root, file)
       if (below.startsWith('..') || path.isAbsolute(below)) throw Error('Client package must stay inside its integration')

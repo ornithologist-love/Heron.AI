@@ -28,11 +28,12 @@ async function parallel(items, action) {
   }))
 }
 
-async function sourceInventory(source, project, manifest) {
+async function sourceInventory(source, project, manifest, builtForks) {
   const context = await distributionFileContext(source, manifest)
   const workspace = inside(path.join(project, 'packages'), source)
     && !path.relative(project, source).split(path.sep).includes('node_modules')
   const firstParty = inside(path.join(project, 'packages/common'), source)
+  const builtOutput = firstParty && builtForks.has(manifest.name)
   const admitted = firstParty ? visibleSourceFiles(project) : undefined
   const excluded = new Set(['node_modules', '.git', '.cache', ...(workspace ? ['tests'] : [])])
   const files = {}
@@ -44,7 +45,7 @@ async function sourceInventory(source, project, manifest) {
       if (entry.isSymbolicLink() && !inside(project, await fs.realpath(file))) throw Error('Dependency file leaves this checkout: ' + file)
       if (stat.isDirectory()) await walk(file)
       else if (stat.isFile() && name !== 'package.json' && !name.endsWith('.map')
-        && (!admitted || admitted.has(path.resolve(file)))
+        && (!admitted || admitted.has(path.resolve(file)) || (builtOutput && name.startsWith('lib/')))
         && name !== 'heron-ai-fork.json' && !discardDistributionFile(name, context))
         files[name === 'lib/heron-ai-fork.json' ? 'heron-ai-fork.json' : name] = digest(await fs.readFile(file))
     }
@@ -94,10 +95,12 @@ export async function assembleDependencies(project, product, host) {
   let phaseStart = started
   const mark = name => { const now = performance.now(); phases.push([name, now - phaseStart]); phaseStart = now }
   const manifest = await read(path.join(product, 'package.json'))
+  const builtForks = new Set((await read(path.join(project, 'scripts/dsh-build/forks.json'))).map(
+    fork => fork.packageName ?? '@deepseek-ai/dsh-client-' + fork.directory))
   const slots = new Map(), queue = [], resolution = new Map(), rootModules = path.join(host, 'node_modules')
   const inventory = new Map()
   function filesFor(entry) {
-    if (!inventory.has(entry.source)) inventory.set(entry.source, sourceInventory(entry.source, project, entry.manifest))
+    if (!inventory.has(entry.source)) inventory.set(entry.source, sourceInventory(entry.source, project, entry.manifest, builtForks))
     return inventory.get(entry.source)
   }
   async function resolve(from, name) {

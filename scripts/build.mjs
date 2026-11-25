@@ -106,7 +106,7 @@ async function mirror(sourceDirectory, targetDirectory, { sourceMaps = false } =
 const component = bundledPlugins.length ? null : buildReceipt(root, 'AI payload:' + output, () => payloadInputs(root), [output], 'payload-v1')
 if (component?.reusable) process.exit(0)
 await fs.mkdir(cache, { recursive: true })
-for (const name of ['dsh', 'community/dsh-mcp-manager', 'community/dsh-skill-manager', 'community/dsh-better-sidebar']) {
+for (const name of ['dsh', 'community/dsh-better-sidebar']) {
   if (!(await exists(path.join(root, 'packages', name, '.git'))) || !(await exists(path.join(root, 'packages', name, 'package.json')))) {
     throw Error('Submodule is not initialized: ' + name + '. Run git submodule update --init --recursive.')
   }

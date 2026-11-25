@@ -13,8 +13,8 @@
     "sourceMap": true,
     "declarationMap": true,
     "preserveSymlinks": true,
-    "rootDir": "../../packages/community/dsh-mcp-manager/src",
-    "outDir": "../../packages/community/dsh-mcp-manager/lib/types",
+    "rootDir": "../../packages/common/mcp-manager/src",
+    "outDir": "../../packages/common/mcp-manager/lib/types",
     "typeRoots": [
       "../../node_modules/@types"
     ],
@@ -32,6 +32,6 @@
     "**/*.spec.*"
   ],
   "files": [
-    "../../packages/community/dsh-mcp-manager/src/index.ts"
+    "../../packages/common/mcp-manager/src/index.ts"
   ]
 }

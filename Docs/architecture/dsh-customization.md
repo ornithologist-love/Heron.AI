@@ -66,13 +66,13 @@ DSH 尚在预发布阶段，很多位置没有扩展点。曾把"DSH 一行不�
 
 Typert 的 CSS、字体和文本资源过滤放在 `scripts/dsh-build/typert.mjs`。它通过官方 `WorkspaceCaches` 取得清单快照，仅过滤内存中的资源导出，再交回官方分析器；不改写安装包清单、生成器源码或编译产物。
 
-## 社区子模块
+## 社区包与仓内包
 
-三个社区插件分别为 `packages/community/dsh-mcp-manager`、`packages/community/dsh-skill-manager` 与 `packages/community/dsh-better-sidebar`。前两个是放在 GitHub 的公开 fork，提交不得含业务专有内容或私有信息，规则比 DSH 宽：**可以直接改源码，不要求提上游**。产品需要的行为直接改在 fork 里，不追社区仓自己的测试与覆盖率规范；fork 按自有代码维护。保留一条习惯：产品名与产品专用取值不硬编码，经插件配置或注册接口传入，业务包负责提供。
+社区子模块目前仅保留 `packages/community/dsh-better-sidebar`；原 `dsh-mcp-manager` 与 `dsh-skill-manager` 均已收归 `packages/common/` 直接随 Heron.AI 主仓按自有代码维护。提交不得含业务专有内容或私有信息，规则比 DSH 宽：**可以直接改源码，不要求提上游**，不追社区仓自己的测试与覆盖率规范。保留一条习惯：产品名与产品专用取值不硬编码，经插件配置或注册接口传入，业务包负责提供。
 
 BSB 自 2026-11-07 起直接固定官方 Tag，不维护 fork、不改源码：官方 v0.30 已适配 DSH 0.2.2，原有补丁只剩设置页外观一项，不值得长期追一个每周发版的上游。需要的修改提 PR 给官方。官方包不带 fork 标记，Heron.AI 构建按 `forks.json` 的版本与官方提交识别它，并在编译前运行 `prepareScripts` 声明的生成步骤（如 mermaid 内联资源）。详见 [Git 工作流](../guides/git-workflow.md#bsb-官方版本)。
 
-MCP 与技能管理器按自有 fork 维护，不要求与社区上游保持可合并；BSB 直接用官方版本。三者都从子模块源码编译，改源码不增加薄替换层；社区更新由我们决定是否同步，冲突在对应源码分支解决。
+`packages/common/mcp-manager` 与 `packages/common/skill-manager` 按自有代码维护，不要求与社区上游保持可合并；BSB 直接用官方版本。三者都从源码编译，改源码不增加薄替换层。
 
 ## 测试与覆盖率
 

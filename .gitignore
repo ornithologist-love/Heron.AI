@@ -5,7 +5,8 @@ heron-ai-fork.json
 /dist/
 /artifacts/
 /data/
-/packages/community/dsh-skill-manager/lib/
+/packages/common/mcp-manager/lib/
+/packages/common/skill-manager/lib/
 /packages/dsh/packages/client/file-upload/dist/
 bin/
 obj/

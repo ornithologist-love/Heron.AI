@@ -18,8 +18,8 @@
         "../../node_modules/@deepseek-ai/dsh-client-ui-primitives"
       ]
     },
-    "rootDir": "../../packages/community/dsh-mcp-manager/src",
-    "outDir": "../../packages/community/dsh-mcp-manager/lib/types",
+    "rootDir": "../../packages/common/mcp-manager/src",
+    "outDir": "../../packages/common/mcp-manager/lib/types",
     "typeRoots": [
       "../../node_modules/@types"
     ],
@@ -37,7 +37,7 @@
     "**/*.spec.*"
   ],
   "include": [
-    "../../packages/community/dsh-mcp-manager/src/client",
-    "../../packages/community/dsh-mcp-manager/src/env.d.ts"
+    "../../packages/common/mcp-manager/src/client",
+    "../../packages/common/mcp-manager/src/env.d.ts"
   ]
 }
