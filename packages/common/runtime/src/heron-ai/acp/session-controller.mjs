@@ -30,6 +30,19 @@ class HeronAiSessionPolicy {
     this.ctx = ctx
     this.modelPreferences = ctx.heronAiModelPreferences
     this.preferenceWrite = Promise.resolve()
+    this.recommendedModels = new Map()
+  }
+  setRecommendedModels(providerId, modelIds) {
+    if (typeof providerId !== 'string' || !providerId) return () => {}
+    const ids = modelIds ? new Set([...modelIds].filter(id => typeof id === 'string' && id.length > 0)) : null
+    if (!ids || ids.size === 0) {
+      this.recommendedModels.delete(providerId)
+      return () => {}
+    }
+    this.recommendedModels.set(providerId, ids)
+    return () => {
+      if (this.recommendedModels.get(providerId) === ids) this.recommendedModels.delete(providerId)
+    }
   }
   async create(request, next, selectInitialModel) {
     // An obsolete saved default must not prevent opening a new conversation.
@@ -87,13 +100,17 @@ class HeronAiSessionPolicy {
     const groups = await Promise.all(catalog.groups.filter(group => !group.id.startsWith('heron-ai-acp-')).map(async group => {
       const metadata = is_model_provider(group.id)
         ? await this.ctx.heronAiAcp.registry.catalogModels(group.id).catch(() => []) : []
+      const customPicked = this.recommendedModels.get(group.id)
       // Every provider's picker list follows one family order (see model-family.mjs).
       return { ...group, models: sortModelsByFamily(group.models).map(model => {
         const row = metadata.find(item => item.id === model.id)
         const brand = modelBrand(model.id)
         const displayMetadata = { ...(brand ? { brand } : {}), ...(row?.credits === undefined ? {} : { credits: row.credits }) }
+        const recommended = row
+          ? row.heron_ai_picked === true
+          : (customPicked ? customPicked.has(model.id) : undefined)
         return { ...model, ...(Object.keys(displayMetadata).length ? { metadata: displayMetadata } : {}),
-          ...(row ? { recommended: row.heron_ai_picked === true } : {}) }
+          ...(recommended === undefined ? {} : { recommended }) }
       }) }
     }))
     // Configuration entry points remain discoverable before a route is usable.
