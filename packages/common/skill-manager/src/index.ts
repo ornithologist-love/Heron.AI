@@ -28,7 +28,7 @@ import {
   access as nodeAccess, mkdir as nodeMkdir, readFile as nodeReadFile, readdir as nodeReaddir,
   realpath as nodeRealpath, rename as nodeRename, rm as nodeRm, writeFile as nodeWriteFile,
 } from 'node:fs/promises'
-import { join as pathJoin } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 // Type-only: pulls the dsh-skill (ctx.skills) and client-connection
 // (ctx.connection) Context merges into this program.
 import type {} from '@deepseek-ai/dsh-skill'
@@ -415,6 +415,11 @@ const MAX_TREE_NODES = 5000
 const MAX_ZIP_ENTRIES = 2000
 const MAX_ZIP_BYTES = 100 * 1024 * 1024
 
+function isInsidePath(path: string, root: string): boolean {
+  const fromRoot = relative(root, path)
+  return fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot)
+}
+
 /** Recursively list a directory into a file tree, bounded to regular files and dirs. */
 async function listTree(fs: {
   resolve(path: string): Promise<{ displayPath: string; targetKey?: string }>
@@ -430,7 +435,7 @@ async function listTree(fs: {
     // (names/sizes/structure); drop any entry whose canonical key leaves the
     // root prefix. Files outside the root stay unreadable regardless.
     const entryKey = entry.target.targetKey ?? entry.target.displayPath
-    if (!(entryKey === rootKey || entryKey.startsWith(`${rootKey}/`) || entryKey.startsWith(`${rootKey}\\`))) {
+    if (!isInsidePath(entryKey, rootKey)) {
       continue
     }
     if (entry.type === 'directory') {
@@ -458,7 +463,7 @@ async function listTree(fs: {
       })
     }
   }
-  return { name: path.split('/').filter(Boolean).pop() ?? path, kind: 'directory', path, children }
+  return { name: basename(path) || path, kind: 'directory', path, children }
 }
 
 /** Join a zip entry path onto a base directory, refusing traversal escapes. */
@@ -472,7 +477,7 @@ function nodeJoinSafe(base: string, zipPath: string): string | undefined {
 async function scanWorkspaceSkills(wsPath: string): Promise<{
   name: string; description: string; whenToUse?: string; resourcePath: string
 }[]> {
-  const skillsDir = `${wsPath}/.dsh/skills`
+  const skillsDir = join(wsPath, '.dsh', 'skills')
   let entries: { name: string; isDirectory(): boolean }[]
   try {
     entries = await nodeReaddir(skillsDir, { withFileTypes: true })
@@ -482,10 +487,10 @@ async function scanWorkspaceSkills(wsPath: string): Promise<{
   const out: { name: string; description: string; whenToUse?: string; resourcePath: string }[] = []
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    const skillDir = `${skillsDir}/${entry.name}`
+    const skillDir = join(skillsDir, entry.name)
     let raw: string
     try {
-      raw = await nodeReadFile(`${skillDir}/SKILL.md`, 'utf8')
+      raw = await nodeReadFile(join(skillDir, 'SKILL.md'), 'utf8')
     } catch {
       continue // no SKILL.md → not a skill
     }
@@ -507,7 +512,7 @@ async function scanWorkspaceSkills(wsPath: string): Promise<{
 async function scanDisabledSkills(skillsRoot: string): Promise<{
   name: string; description: string; whenToUse?: string; resourcePath: string; restorePath: string
 }[]> {
-  const systemDir = `${skillsRoot}/.system`
+  const systemDir = join(skillsRoot, '.system')
   let entries: { name: string; isDirectory(): boolean }[]
   try {
     entries = await nodeReaddir(systemDir, { withFileTypes: true })
@@ -519,10 +524,10 @@ async function scanDisabledSkills(skillsRoot: string): Promise<{
   }[] = []
   for (const entry of entries) {
     if (!entry.isDirectory()) continue
-    const hiddenPath = `${systemDir}/${entry.name}`
+    const hiddenPath = join(systemDir, entry.name)
     let raw: string
     try {
-      raw = await nodeReadFile(`${hiddenPath}/SKILL.md`, 'utf8')
+      raw = await nodeReadFile(join(hiddenPath, 'SKILL.md'), 'utf8')
     } catch {
       continue
     }
@@ -533,7 +538,7 @@ async function scanDisabledSkills(skillsRoot: string): Promise<{
       description: parsed.description,
       ...parsed.whenToUse === undefined ? {} : { whenToUse: parsed.whenToUse },
       resourcePath: hiddenPath,
-      restorePath: `${skillsRoot}/${entry.name}`,
+      restorePath: join(skillsRoot, entry.name),
     })
   }
   return out
@@ -639,8 +644,7 @@ function buildService(
    */
   async function assertInside(requestPath: string, prefixes: string[], what: string, refusal: string): Promise<string> {
     const key = await resolveCanonical(requestPath)
-    const allowed = prefixes.some(prefix =>
-      key === prefix || key.startsWith(`${prefix}/`) || key.startsWith(`${prefix}\\`))
+    const allowed = prefixes.some(prefix => isInsidePath(key, prefix))
     if (!allowed) {
       throw new Error(`refusing to ${what}: path is outside a ${refusal} skill directory (${requestPath})`)
     }
@@ -821,10 +825,13 @@ function buildService(
       // Cold reads retain the exact preset revision until all scoped reads finish.
       const presets = ctx.get('agentPresets')
       if (presets !== undefined) {
-        try {
-          const roster = await presets.list()
-          for (const preset of roster) {
-            if (preset.broken !== undefined) { complete = false; continue }
+        const roster = await presets.list().catch(() => {
+          complete = false
+          return []
+        })
+        for (const preset of roster) {
+          if (preset.broken !== undefined) { complete = false; continue }
+          try {
             await using lease = await presets.acquireScope(preset.id)
             const presetSnapshot = await skills.snapshot({
               scope: lease.key,
@@ -854,10 +861,9 @@ function buildService(
                 ...resourcePath === undefined ? {} : { resourcePath },
               })
             }
+          } catch {
+            complete = false
           }
-        } catch {
-          // Report an incomplete catalog when a preset revision cannot be read.
-          complete = false
         }
       }
 
@@ -1080,7 +1086,7 @@ function buildService(
       const files = new Map<string, Uint8Array>()
       await collectDirFiles(key, key, files, { bytes: 0 })
       const zipped = zipSync(Object.fromEntries(files), { level: 6 })
-      const base = key.split('/').filter(Boolean).pop() ?? 'skill'
+      const base = basename(key) || 'skill'
       return {
         zipBase64: Buffer.from(zipped).toString('base64'),
         fileName: `${base}.zip`,
@@ -1102,19 +1108,20 @@ function buildService(
       // restored; provider-backed (system/preset/plugin) skills are read-only
       // and keep whatever state the deployment gives them.
       const key = await resolveCanonical(request.path)
-      const base = key.split('/').filter(Boolean).pop()
-      if (base === undefined || base === '.system') {
-        throw new Error(`cannot toggle a skill directory named "${base ?? ''}"`)
+      const base = basename(key)
+      if (base === '' || base === '.system') {
+        throw new Error(`cannot toggle a skill directory named "${base}"`)
       }
-      const parent = key.slice(0, key.length - base.length).replace(/\/+$/, '')
-      const hidden = `${parent}/.system/${base}`
+      const parent = await resolveCanonical(dirname(key))
+      const systemDir = join(parent, '.system')
+      const hidden = join(systemDir, base)
 
       if (request.enable) {
         // Restore: `…/.system/<name>` → `…/<name>`. The parent (`…/<skills>`)
         // must be a writable skills root — a hidden skill may no longer be in
         // the visible-skill whitelist after a catalog refresh, so the root is
         // the stable boundary. The hidden dir must actually exist.
-        if (!writableSkillRoots.some(root => parent === root || parent.startsWith(`${root}/`))) {
+        if (!writableSkillRoots.some(root => isInsidePath(parent, root))) {
           throw new Error(`refusing to restore outside a writable skill directory: ${request.path}`)
         }
         if (!(await nodeExists(hidden))) return { ok: true } // already visible
@@ -1123,11 +1130,11 @@ function buildService(
       }
       // Disable: `…/<name>` → `…/.system/<name>`; the visible dir must be in
       // the writable whitelist, and the hidden target must not already exist.
-      if (!writableSkillDirs.some(prefix => key === prefix || key.startsWith(`${prefix}/`))) {
+      if (!writableSkillDirs.some(prefix => isInsidePath(key, prefix))) {
         throw new Error(`refusing to disable outside a writable skill directory: ${request.path}`)
       }
       if (await nodeExists(hidden)) return { ok: true } // already hidden
-      await nodeMkdir(`${parent}/.system`, { recursive: true })
+      await nodeMkdir(systemDir, { recursive: true })
       await nodeRename(key, hidden)
       return { ok: true }
     },

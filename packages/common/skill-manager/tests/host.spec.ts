@@ -424,29 +424,33 @@ describe('dsh-skill-manager host path-safety', () => {
   })
 })
 
-describe('dsh-skill-manager host preset fallback', () => {
-  it('scans a preset skills dir when its standing mount fails', async () => {
+describe('dsh-skill-manager host preset discovery', () => {
+  // Anchor: Docs/architecture/extensions.md#功能模板
+  it('marks the catalog incomplete and still includes skills from healthy presets', async () => {
     ctx = new Context()
-    ctx.provide('fs', fsStub({
-      '/home/u/.dsh/.agent-presets/test/agent.cordis.yml': '- id: x',
-      '/home/u/.dsh/.agent-presets/test/skills/fallback-skill/SKILL.md': '---\nname: fallback-skill\ndescription: From the test preset dir.\n---\n',
-    }) as never)
+    const healthyScope = {}
+    const presetSkill = {
+      name: 'sample-skill', description: 'A test skill', source: 'custom', provider: 'fixture',
+      invocation: { modelInvocable: true, userInvocable: true },
+    }
     ctx.provide('skills', {
-      snapshot: vi.fn(async () => ({ skills: [], complete: true })),
+      snapshot: async ({ scope }: { scope?: object }) => snapshotRows(scope === healthyScope ? [presetSkill] : []),
     } as never)
     ctx.provide('agentPresets', {
-      list: vi.fn(async () => [{ id: 'test' }]),
-      standingKeyFor: vi.fn(async () => { throw new Error('preset mount failed') }),
-      read: vi.fn(async () => '- id: x'),
-      resolve: vi.fn(async () => ({ path: '/home/u/.dsh/.agent-presets/test/agent.cordis.yml' })),
+      list: async () => [{ id: 'broken' }, { id: 'healthy' }],
+      acquireScope: async (id: string) => {
+        if (id === 'broken') throw new Error('preset mount failed')
+        return { key: healthyScope, async [Symbol.asyncDispose]() {} }
+      },
     } as never)
     const { connection, handler } = connectionStub()
     ctx.provide('connection', connection as never)
     await ctx.plugin(apply)
-    const result = await handler!('list', {}) as { ok: true; value: { skills: { name: string; tier: string; preset: string }[] } }
-    const skill = result.value.skills.find(s => s.name === 'fallback-skill')
-    expect(skill).toBeDefined()
-    expect(skill).toMatchObject({ tier: 'custom', preset: 'test' })
+    const result = await handler('list', {})
+    expect(result).toMatchObject({ ok: true, value: {
+      complete: false,
+      skills: expect.arrayContaining([expect.objectContaining({ name: presetSkill.name, tier: 'custom', preset: 'healthy' })]),
+    } })
   })
 })
 

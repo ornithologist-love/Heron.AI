@@ -9,8 +9,8 @@ covers: [config/upstreams.json, config/dsh-artifacts.lock.json, scripts/dsh-arti
 
 | 子模块 | GitHub 上游 | 当前上游基线 |
 | --- | --- | --- |
-| `packages/dsh` | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`，`dsh-v0.2.2-rc.1` |
-| `packages/community/dsh-better-sidebar` | [Better Sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) | `0b6293f05145d6852428a05035d5ea0f370992be`，`v0.30.1` |
+| `packages/dsh` | [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) | `9c2670d3bce5275e0d1610272958121af87787bb`，`dsh-v0.2.2-rc.5` |
+| `packages/community/dsh-better-sidebar` | [Better Sidebar](https://github.com/omdsh-dev/DSH-better-sidebar) | `0f4b87c49dc6ae4aef7371be0a78f9d277a7b4e0`，`v0.33.0` |
 
 `packages/common/mcp-manager`（原 [MCP Manager](https://github.com/Nichts0v0/dsh-mcp-manager) 基线 `335f797c30b9c3880d997c27343c609c8019f040`）与 `packages/common/skill-manager`（原 [Skill Manager](https://github.com/AKS1st/dsh-skill-manager) 基线 `fb452031031ea50a3287292d22b54e765d1039dc`）均已收归仓内自有源码维护，不再作为子模块。父仓 Gitlink 固定实际提交；DSH 在表中的官方提交上叠加通用口子、修复与通用功能，表中记录官方基线；补丁改到的包从源码编译，其余包用官方预编译产物；BSB 固定官方 Tag，源码构建保留其懒加载包。`config/upstreams.json` 记录上游来源和许可证；分支、Tag 和历史直接在各子模块查看。
 

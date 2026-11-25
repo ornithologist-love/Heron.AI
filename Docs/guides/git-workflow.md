@@ -32,7 +32,7 @@ DSH fork 为 `github.com/ornithologist-love/deepseek-harness`，配置为 `origi
 2. 从基线开 `feature/dsh-v<新版本>`，按顺序 cherry-pick 旧开发线 `<旧Tag>..feature/dsh-v<旧版本>` 的提交；上游已合入的口子跳过，冲突就地解决。
 3. 用 `git range-diff <旧Tag>..feature/dsh-v<旧版本> <新Tag>..feature/dsh-v<新版本>` 逐个核对：哪些搬过来、哪些丢弃、哪些改过。
 4. 经用户授权后推送基线与新开发线到 fork。
-5. 父仓同步 gitlink 与 `config/upstreams.json`（记录官方基线 Tag 与提交），按上文完成依赖、构建与验证后提交。
+5. 父仓同步 gitlink、`.gitmodules` 中的 DSH 开发线和 `config/upstreams.json` 中的官方基线，按上文完成依赖、构建与验证后提交。
 
 旧开发线保留，不删除。
 
