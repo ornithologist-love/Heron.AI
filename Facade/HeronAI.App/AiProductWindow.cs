@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using HeronAI.Facade;
 using System.Text.Json;
 
@@ -11,7 +10,7 @@ namespace HeronAI.App;
 
 internal sealed record AppOptions(string ProductRoot, string StateDirectory, string? ServerUrl, string? ConfigurationFile)
 {
-    public static AppOptions Parse(string[] args)
+    public static AppOptions Parse(string[] args, AppIdentity identity)
     {
         string? root = null, state = null, server = null, configurationFile = null;
         for (var i = 0; i < args.Length; i++)
@@ -27,7 +26,7 @@ internal sealed record AppOptions(string ProductRoot, string StateDirectory, str
             }
         }
         root ??= FindProductRoot();
-        state ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".heron-ai");
+        state ??= Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), identity.StateFolder);
         return new(root, state, server, configurationFile);
     }
 
@@ -40,13 +39,13 @@ internal sealed record AppOptions(string ProductRoot, string StateDirectory, str
                 if (current.Name.Equals("AiHost", StringComparison.OrdinalIgnoreCase) && File.Exists(Path.Combine(current.FullName, "main.mjs")))
                     return current.Parent?.FullName ?? current.FullName;
             }
-        throw new DirectoryNotFoundException("HeronAI runtime not found. Run npm run build or pass --product-root.");
+        throw new DirectoryNotFoundException("AI runtime not found. Build the product or pass --product-root.");
     }
 }
 
 internal sealed class AiProductWindow : Window
 {
-    private static readonly Uri BrandIconUri = new("avares://HeronAI.App/Assets/heron-64.png");
+    private readonly string _brandName;
     private readonly AiProductRuntime _runtime;
     private readonly AiDiagnosticsController _diagnostics;
     private readonly AiProductView _mainView;
@@ -58,22 +57,23 @@ internal sealed class AiProductWindow : Window
     private AiDiagnosticsPanel? _diagnosticsPanel;
     private bool _closing;
 
-    public AiProductWindow(AppOptions options)
+    public AiProductWindow(AppOptions options, AppIdentity identity)
     {
-        (_windowIcon, _brandMark) = LoadBrandAssets();
+        _brandName = identity.Name;
+        (_windowIcon, _brandMark) = LoadBrandAssets(identity.OpenIcon);
         Icon = _windowIcon;
         var localRoot = options.StateDirectory;
         var webViewProfile = Path.Combine(options.StateDirectory, "cache", "webview2");
         _runtime = new(new AiProductOptions(options.ProductRoot, options.StateDirectory, options.ServerUrl,
-            localRoot, WebViewProfileDirectory: webViewProfile)
-            { HostSource = "heron-ai-app", ConfigurationFile = options.ConfigurationFile });
+            localRoot, WebViewProfileDirectory: webViewProfile, HostIntegration: identity.HostIntegration)
+            { HostSource = identity.HostSource, ConfigurationFile = options.ConfigurationFile });
         _mainView = new AiProductView(_runtime);
         _diagnostics = new AiDiagnosticsController(_runtime, async token =>
         {
             await _mainView.ReloadRuntimeAsync(token);
             if (_sessionView != null) await _sessionView.ReloadRuntimeAsync(token);
         });
-        Width = 1360; Height = 900; MinWidth = 920; MinHeight = 620; Title = "Heron.AI";
+        Width = 1360; Height = 900; MinWidth = 920; MinHeight = 620; Title = _brandName;
         var brand = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -83,7 +83,7 @@ internal sealed class AiProductWindow : Window
             Children =
             {
                 new Image { Source = _brandMark, Width = 20, Height = 20, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center },
-                new TextBlock { Text = "Heron.AI", FontSize = 14, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
+                new TextBlock { Text = _brandName, FontSize = 14, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
             },
         };
         var openSession = new Button { Content = "打开单会话窗口", Margin = new Thickness(8) };
@@ -105,9 +105,9 @@ internal sealed class AiProductWindow : Window
         Closing += OnClosing;
     }
 
-    private static (WindowIcon, Bitmap) LoadBrandAssets()
+    private static (WindowIcon, Bitmap) LoadBrandAssets(Func<Stream> openIcon)
     {
-        using var stream = AssetLoader.Open(BrandIconUri);
+        using var stream = openIcon();
         using var buffer = new MemoryStream();
         stream.CopyTo(buffer);
         buffer.Position = 0;
@@ -121,7 +121,7 @@ internal sealed class AiProductWindow : Window
     {
         if (_sessionWindow != null) { _sessionWindow.Show(); _sessionWindow.Activate(); return; }
         var view = new AiProductView(_runtime, "session");
-        var window = new Window { Title = "Heron.AI · 会话", Icon = _windowIcon, Width = 920, Height = 760, MinWidth = 680, MinHeight = 500, Content = view };
+        var window = new Window { Title = _brandName + " · 会话", Icon = _windowIcon, Width = 920, Height = 760, MinWidth = 680, MinHeight = 500, Content = view };
         window.Closing += (_, e) => { if (_closing) return; e.Cancel = true; window.Hide(); };
         _sessionView = view;
         _sessionWindow = window;
