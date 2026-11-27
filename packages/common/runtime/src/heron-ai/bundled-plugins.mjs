@@ -1,5 +1,4 @@
-export const PRODUCT_BUNDLES = ['custome-theme']
-export const BUILTIN_BUNDLES = ['@deepseek-ai/dsh-experimental-voice-input-bundle', ...PRODUCT_BUNDLES]
+export const BUILTIN_BUNDLES = ['@deepseek-ai/dsh-experimental-voice-input-bundle']
 
 // Only reconcile defaults previously supplied by a payload. User-installed
 // dependencies and explicit disables remain owned by the native plugin manager.

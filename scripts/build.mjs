@@ -233,7 +233,11 @@ await stage('mirror-business-content', async () => {
 const require = createRequire(path.join(product, 'package.json'))
 const frontend = path.join(path.dirname(require.resolve('@deepseek-ai/dsh-web-frontend/package.json')), 'dist')
 await stage('mirror-web', () => mirror(frontend, path.join(host, 'dsh/web')))
-await stage('mirror-ui', () => mirror(path.join(cache, 'ui'), path.join(host, 'heron-ai/ui'), { sourceMaps: true }))
+await stage('mirror-ui', async () => {
+  const ui = path.join(host, 'heron-ai/ui')
+  await mirror(path.join(cache, 'ui'), ui, { sourceMaps: true })
+  await mirror(path.join(web, 'typography'), path.join(ui, 'typography'))
+})
 await stage('mirror-assets', () => mirror(path.join(product, 'assets'), path.join(host, 'heron-ai/assets')))
 await fs.copyFile(path.join(product, 'assets/runtime-logo.png'), path.join(host, 'heron-ai/content/runtime-logo.png'))
 await stage('prune-distribution', () => node(path.join(root, 'scripts/prune-distribution.mjs'), [host]))

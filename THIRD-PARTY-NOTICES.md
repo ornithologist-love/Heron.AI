@@ -10,8 +10,7 @@ The source distribution retains these upstream licenses:
 | DSH MCP Manager | MIT | [License](packages/common/mcp-manager/LICENSE) |
 | DSH Skill Manager | MIT | [License](packages/common/skill-manager/LICENSE) |
 | DSH Better Sidebar | MIT | [License](packages/community/dsh-better-sidebar/LICENSE) |
-| Google Sans | SIL OFL 1.1 | [Original notice](packages/common/custome-theme/assets/google-sans/OFL.txt) |
-| IBM Plex Mono | SIL OFL 1.1 | [Original notice](packages/common/custome-theme/assets/ibm-plex-mono/OFL.txt) |
+| IBM Plex Mono | SIL OFL 1.1 | [Original notice](packages/common/ui/typography/ibm-plex-mono/OFL.txt) |
 | Model icons from LobeHub | MIT | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.lobe-icons) |
 | Xiaomi icon from Simple Icons | CC0 1.0 | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.simple-icons) |
 

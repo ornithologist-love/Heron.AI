@@ -33,7 +33,7 @@ export async function apply(ctx) {
         const file = path.resolve(root, decodeURIComponent(url.pathname.slice('/heron-ai-acp/ui/'.length)))
         if (!file.startsWith(root + path.sep) || !['.js', '.css', '.png', '.svg', '.ico', '.woff', '.woff2'].includes(path.extname(file))) throw new Error('Unknown widget asset')
         const bytes = await fs.readFile(file)
-        res.writeHead(200, { 'Content-Type': ({ '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon' })[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' })
+        res.writeHead(200, { 'Content-Type': ({ '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2' })[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-cache' })
         res.end(bytes); return
       }
       let body = {}

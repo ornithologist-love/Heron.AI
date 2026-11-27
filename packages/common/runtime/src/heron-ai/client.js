@@ -439,6 +439,14 @@ window.__ModuleLoader__.load({
         document.head.appendChild(tag)
         return () => tag.remove()
       })
+      const platform = navigator.userAgentData?.platform || navigator.platform
+      if (/^(win|mac)/i.test(platform)) ctx.effect(() => {
+        const typography = document.createElement('link')
+        typography.rel = 'stylesheet'
+        typography.href = new URL('heron-ai-acp/ui/typography/typography.css', document.baseURI).href
+        document.head.appendChild(typography)
+        return () => typography.remove()
+      })
       // Retain the recent selection across DSH's per-process random ports, as in
       // FL's direct client. This changes navigation only, never sends a prompt.
       ctx.effect(() => {

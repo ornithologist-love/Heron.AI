@@ -29,8 +29,6 @@ npm start -- --state-dir .cache/dev-state
 
 运行时插件经 DSH 原生插件管理器安装、启停。发行方也可通过外部组合清单显式预装；用户已有的数据和启停选择继续保留。机制见[扩展架构](Docs/architecture/extensions.md)。
 
-[自定义主题](packages/common/custome-theme/README.md)随 Heron.AI 提供，默认启用。
-
 在设置的[已归档的会话](Docs/architecture/extensions.md#会话归档)中，可以查找、恢复或彻底删除已归档的本机会话。
 
 ## 许可
