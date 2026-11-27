@@ -395,8 +395,7 @@ window.__ModuleLoader__.load({
         document.head.appendChild(tag)
         return () => tag.remove()
       })
-      const platform = navigator.userAgentData?.platform || navigator.platform
-      if (/^(win|mac)/i.test(platform)) ctx.effect(() => {
+      ctx.effect(() => {
         const typography = document.createElement('link')
         typography.rel = 'stylesheet'
         typography.href = new URL('heron-ai-acp/ui/typography/typography.css', document.baseURI).href
