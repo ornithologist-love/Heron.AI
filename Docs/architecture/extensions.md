@@ -100,7 +100,7 @@ Codex 预设输出原生插件清单和随包的 MCP、技能，并自带本地�
 
 ### Google Connector
 
-Google Connector 是本机可选插件。Heron 持有 Google Workspace 账号授权，首次授权由系统浏览器、本机回调和 PKCE 完成。浏览器无法自动打开时，可在连接器详情页复制同一次授权的短期链接。宿主可预置 Desktop OAuth 客户端，个人安装可导入 Google Cloud 下载的客户端配置。用户授权和续期令牌由 Heron 凭据存储持有。工具按会话发现，实际执行只接受从本机已认证浏览器提交的回合。编辑调用通过该会话的审批服务等待用户确认。
+Google Connector 随公共运行包提供，默认启用。Heron 持有 Google Workspace 账号授权，首次授权由系统浏览器、本机回调和 PKCE 完成。浏览器无法自动打开时，可在连接器详情页复制同一次授权的短期链接。宿主可预置 Desktop OAuth 客户端，个人安装可导入 Google Cloud 下载的客户端配置。用户授权和续期令牌由 Heron 凭据存储持有。工具按会话发现，实际执行只接受从本机已认证浏览器提交的回合。编辑调用通过该会话的审批服务等待用户确认。
 
 Drive、Docs、Sheets、Slides、Calendar 和 Gmail 由 Node 直接请求各自的 Google Workspace REST API。每个服务的启停保存在本机，启用的服务才进入工具发现和 Skill 列表。授权时申请启用服务的权限，执行时校验该工具所需的已授予权限。短期令牌通过 HTTPS 发送给对应 Google API，工具错误仅返回请求状态，避免把响应正文带入会话。随插件提供的服务 Skill 在用户显式调用时加载。Docs 替换预览读取同一标签范围内的文本，正式写入继续走审批。
 

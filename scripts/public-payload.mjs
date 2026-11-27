@@ -25,6 +25,6 @@ export function assertPublicPayload(host) {
       }
     }
   }
-  for (const scope of ['@common', '@heron-ai', '@host']) walk(path.join(host, 'node_modules', scope))
+  for (const scope of ['@common', '@heron-ai', '@host', 'dsh-google-connector']) walk(path.join(host, 'node_modules', scope))
   console.log('[public-payload] No optional deployment content, credentials or certificates')
 }

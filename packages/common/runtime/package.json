@@ -263,6 +263,7 @@
     "@common/brand": "workspace:*",
     "@common/toolbar": "workspace:*",
     "@common/capabilities": "workspace:*",
+    "dsh-google-connector": "workspace:*",
     "dsh-better-sidebar": "workspace:*"
   },
   "version": "2.3.0",

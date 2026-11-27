@@ -6,11 +6,13 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { pluginBundleInputs, selectedFile, selectedMcpServers, dropExcludedLinks } from '../scripts/plugin-bundles.mjs'
-import { bundledPluginSelection } from '../packages/common/runtime/src/heron-ai/bundled-plugins.mjs'
+import { bundledPluginSelection, PRODUCT_BUNDLES } from '../packages/common/runtime/src/heron-ai/bundled-plugins.mjs'
 
 test('a new payload default is selected once and preserves a later disable', () => {
+  assert.ok(PRODUCT_BUNDLES.includes('dsh-google-connector'))
   const shipped = ['fixture-bundle']
   const initial = bundledPluginSelection({}, shipped)
+  assert.ok(initial.bundles.includes('dsh-google-connector'))
   assert.ok(initial.bundles.includes(shipped[0]))
 
   const disabledProfile = {

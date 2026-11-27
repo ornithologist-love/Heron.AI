@@ -111,6 +111,7 @@
     "@deepseek-ai/dsh-client-ui-deliverables": "workspace:*",
     "@common/toolbar": "workspace:*",
     "@common/capabilities": "workspace:*",
+    "dsh-google-connector": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
     "@deepseek-ai/dsh-sandbox": "workspace:*",
     "@deepseek-ai/dsh-sandbox-policy": "workspace:*",

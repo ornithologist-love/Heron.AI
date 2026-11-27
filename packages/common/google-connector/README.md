@@ -1,6 +1,6 @@
 # Google Connector
 
-可选的 Heron.AI 插件。从左侧导航打开 **连接器 → Google Suite**，在详情中分别启停 Drive、Docs、Sheets、Slides、Calendar 和 Gmail，展开各服务的工具列表查看工具。Drive 和 Docs 默认启用，新增服务由用户开启。Sheets、Slides、Calendar 和 Gmail 提供读取与查找工具。
+随 Heron.AI 提供并默认启用。从左侧导航打开 **连接器 → Google Suite**，在详情中分别启停 Drive、Docs、Sheets、Slides、Calendar 和 Gmail，展开各服务的工具列表查看工具。Drive 和 Docs 默认启用，新增服务由用户开启。Sheets、Slides、Calendar 和 Gmail 提供读取与查找工具。
 
 点击「连接 Google」用默认浏览器授权，或点「复制授权链接」到自己的浏览器打开。浏览器提示已连接后，设置页自动更新连接状态。
 
@@ -8,4 +8,4 @@
 
 插件直接使用 Google Workspace REST API，可以在 Windows、macOS 和 Linux 上使用。会话通过 `search_mcp_tools` 按需发现工具，也可调用随插件提供的 Skill，例如 `/google-sheets`。Docs 的替换支持只读预览，写入由当前会话审批。
 
-插件支持本地路径安装，也可由发行方在组合清单中显式选包。授权、工具和会话的边界见 [扩展架构](../../../Docs/architecture/extensions.md#google-connector)。
+授权、工具和会话的边界见 [扩展架构](../../../Docs/architecture/extensions.md#google-connector)。

@@ -190,6 +190,9 @@ importers:
       dsh-better-sidebar:
         specifier: workspace:*
         version: link:packages/community/dsh-better-sidebar
+      dsh-google-connector:
+        specifier: workspace:*
+        version: link:packages/common/google-connector
       dsh-mcp-manager:
         specifier: workspace:*
         version: link:packages/common/mcp-manager
@@ -1023,6 +1026,9 @@ importers:
       dsh-better-sidebar:
         specifier: workspace:*
         version: link:../../community/dsh-better-sidebar
+      dsh-google-connector:
+        specifier: workspace:*
+        version: link:../google-connector
       dsh-mcp-manager:
         specifier: 0.6.0
         version: link:../mcp-manager
