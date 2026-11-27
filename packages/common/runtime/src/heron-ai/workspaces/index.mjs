@@ -216,9 +216,11 @@ export async function apply(ctx, config) {
   const reply = (res, status, value) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)) }
   // Browser-authenticated reads and user edits; presets still arrive only through host control.
   ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/heron-ai-workspaces', handler: async (req, res) => {
-    if (ctx.connection.requestRejection(req)) return reply(res, 403, { error: 'Request not authorized' })
+    const admission = ctx.connection.admit(req)
+    if ('rejection' in admission) return reply(res, 403, { error: 'Request not authorized' })
     try {
-      if (req.method === 'GET') return reply(res, 200, { items: items(), errors: [...lastErrors.values()].flat() })
+      if (req.method === 'GET') return reply(res, 200, { items: items(), errors: [...lastErrors.values()].flat(),
+        ...(admission.peer.principal.kind === 'owner' ? { archivedSessionIds: [...ctx.workspaceRegistry.archivedSessionIds] } : {}) })
       if (!workspaceOwner) return reply(res, 403, { error: '当前运行时只读取工作区，由主 Sidecar 管理工作区归属' })
       if (req.method !== 'POST') return reply(res, 405, { error: 'Unsupported method' })
       let data = ''

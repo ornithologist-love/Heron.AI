@@ -105,6 +105,7 @@
     "@deepseek-ai/dsh-api-remotes": "workspace:*",
     "@deepseek-ai/dsh-web-frontend": "workspace:*",
     "vite": "^6.4.3",
+    "@common/archived-sessions": "workspace:*",
     "@common/brand": "workspace:*",
     "@deepseek-ai/dsh-client-ui-chat": "workspace:*",
     "@deepseek-ai/dsh-client-ui-deliverables": "workspace:*",

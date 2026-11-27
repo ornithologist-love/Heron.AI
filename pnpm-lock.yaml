@@ -34,6 +34,9 @@ importers:
 
   .:
     devDependencies:
+      '@common/archived-sessions':
+        specifier: workspace:*
+        version: link:packages/common/archived-sessions
       '@common/brand':
         specifier: workspace:*
         version: link:packages/common/brand
@@ -215,6 +218,8 @@ importers:
         specifier: ^6.4.3
         version: 6.4.4(@types/node@24.0.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  packages/common/archived-sessions: {}
+
   packages/common/brand:
     dependencies:
       '@deepseek-ai/schemastery':
@@ -356,6 +361,9 @@ importers:
 
   packages/common/runtime:
     dependencies:
+      '@common/archived-sessions':
+        specifier: workspace:*
+        version: link:../archived-sessions
       '@common/brand':
         specifier: workspace:*
         version: link:../brand

@@ -16,13 +16,16 @@ function installWorkspaceProjects(ctx, React) {
   let localMachineExpanded = navigation.localMachineExpanded !== false
   let expandedMachines = navigation.expandedMachines ?? {}, savingExpansion = Promise.resolve()
   const setMachineExpanded = (hostId, expanded) => {
-    savingExpansion = savingExpansion.then(async () => {
-      await ctx.remote.settings.mutate('heron-ai-navigation', [{ op: 'set',
-        path: hostId === undefined ? ['localMachineExpanded'] : ['expandedMachines', hostId], value: expanded }], undefined)
-      if (hostId === undefined) localMachineExpanded = expanded
-      else expandedMachines = { ...expandedMachines, [hostId]: expanded }
-      publish(state)
-    }).catch(error => publish({ ...state, error: `折叠状态保存失败：${error.message}` }))
+    if (hostId === undefined) localMachineExpanded = expanded
+    else expandedMachines = { ...expandedMachines, [hostId]: expanded }
+    presentation = { ...presentation, machineExpansion: {
+      ...presentation.machineExpansion, local: localMachineExpanded, hosts: expandedMachines,
+    } }
+    notify()
+    const path = hostId === undefined ? ['localMachineExpanded'] : ['expandedMachines', hostId]
+    savingExpansion = savingExpansion
+      .then(() => ctx.remote.settings.mutate('heron-ai-navigation', [{ op: 'set', path, value: expanded }], undefined))
+      .catch(error => publish({ ...state, error: `折叠状态保存失败：${error.message}` }))
   }
   const sessionSections = new Set()
   const listeners = new Set()

@@ -146,6 +146,7 @@ async function buildComposition(config, extensions) {
       text: '你是 Heron.AI，使用当前模型与已接入的工具帮助用户完成任务。项目背景和生产规范以当前工作区的 Skills 与资料为准；连接状态与可用能力以当前宿主信息和实际工具为准。',
     } },
     { id: 'common-toolbar', name: '@common/toolbar' },
+    { id: 'common-archived-sessions', name: '@common/archived-sessions' },
     { id: 'common-capabilities', name: '@common/capabilities' },
     { id: 'common-preset-base', name: manifest.name + '/preset-base', config: {
       standard, delegatedModels: delegatedModelRoutes(config.providerCatalogSnapshot ?? {}) } },

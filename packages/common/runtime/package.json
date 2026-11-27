@@ -257,6 +257,7 @@
     "@deepseek-ai/dsh-agent-preset": "0.2.2-rc.5",
     "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.5",
     "js-yaml": "4.1.1",
+    "@common/archived-sessions": "workspace:*",
     "@common/brand": "workspace:*",
     "@common/toolbar": "workspace:*",
     "@common/capabilities": "workspace:*",

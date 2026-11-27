@@ -31,6 +31,8 @@ npm start -- --state-dir .cache/dev-state
 
 [自定义主题](packages/common/custome-theme/README.md)随 Heron.AI 提供，默认启用。
 
+在设置的[已归档的会话](Docs/architecture/extensions.md#会话归档)中，可以查找、恢复或彻底删除已归档的本机会话。
+
 ## 许可
 
 公共第一方代码使用 [MIT](LICENSE)；第三方组件保留原许可，见 [Third-party notices](THIRD-PARTY-NOTICES.md)。
