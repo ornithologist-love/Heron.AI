@@ -12,6 +12,7 @@ The source distribution retains these upstream licenses:
 | DSH Better Sidebar | MIT | [License](packages/community/dsh-better-sidebar/LICENSE) |
 | Google Sans | SIL OFL 1.1 | [Original notice](packages/common/ui/typography/google-sans/OFL.txt) |
 | Noto Sans SC | SIL OFL 1.1 | [Original notice](packages/common/ui/typography/noto-sans-sc/OFL.txt) |
+| IBM Plex Mono | SIL OFL 1.1 | [Original notice](packages/common/ui/typography/ibm-plex-mono/OFL.txt) |
 | Model icons from LobeHub | MIT | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.lobe-icons) |
 | Xiaomi icon from Simple Icons | CC0 1.0 | [Original notice](packages/common/runtime/assets/model-logos/LICENSE.simple-icons) |
 
