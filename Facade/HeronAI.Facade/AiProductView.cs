@@ -39,6 +39,8 @@ public sealed partial class AiProductView : UserControl
     private readonly List<Visual> _visibilityAncestors = [];
     private CoreWebView2MemoryUsageTargetLevel? _memoryUsageTarget;
     private AiWebViewInputDiagnostics? _inputDiagnostics;
+    private IControllerZoom? _windowsZoom;
+    private bool _initialZoomApplied;
     private TaskCompletionSource<CoreWebView2?> _windowsBrowserReady = NewWindowsBrowserReady();
 
     public AiProductView(AiProductRuntime runtime, string? view = null, bool manageBrowserVisibility = true)
@@ -327,6 +329,17 @@ public sealed partial class AiProductView : UserControl
             _windowsBrowserReady.TrySetResult(null);
             return;
         }
+        var controllerPointer = handle.CoreWebView2Controller;
+        if (controllerPointer != IntPtr.Zero)
+        {
+            try
+            {
+                _windowsZoom = Marshal.GetObjectForIUnknown(controllerPointer) as IControllerZoom;
+                _initialZoomApplied = false;
+            }
+            catch (Exception error) when (error is COMException or InvalidCastException) { }
+            finally { Marshal.Release(controllerPointer); }
+        }
         var pointer = handle.CoreWebView2;
         try
         {
@@ -345,6 +358,34 @@ public sealed partial class AiProductView : UserControl
         finally { if (pointer != IntPtr.Zero) Marshal.Release(pointer); }
     }
 
+    [SupportedOSPlatform("windows")]
+    private void ApplyInitial4KZoom()
+    {
+        if (_initialZoomApplied || _windowsZoom is not { } zoom || _ownerWindow is not { } window) return;
+        var screen = window.Screens.ScreenFromWindow(window) ?? window.Screens.Primary;
+        if (screen == null) return;
+        _initialZoomApplied = true;
+        try
+        {
+            var before = zoom.ZoomFactor;
+            if (Math.Max(screen.Bounds.Width, screen.Bounds.Height) >= 3840 && Math.Abs(before - 1.0) < 0.001)
+                zoom.ZoomFactor = 1.25;
+            _runtime.Logger.LogInformation("AI WebView initial zoom View={View} Screen={Width}x{Height} Scaling={Scaling} RenderScaling={RenderScaling} Before={Before} After={After}",
+                _view ?? "workspace", screen.Bounds.Width, screen.Bounds.Height, screen.Scaling, window.RenderScaling, before, zoom.ZoomFactor);
+        }
+        catch (COMException error)
+        {
+            _runtime.Logger.LogWarning("AI WebView initial zoom failed HResult={HResult}", error.HResult);
+        }
+    }
+
+    [ComImport, Guid("4D00C0D1-9434-4EB6-8078-8697A560334F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IControllerZoom
+    {
+        void _VtblGap1_4(); // IsVisible and Bounds accessors.
+        double ZoomFactor { get; set; }
+    }
+
     private void OnWindowsNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs args)
     {
         if (!args.IsSuccess)
@@ -356,6 +397,8 @@ public sealed partial class AiProductView : UserControl
     {
         if (OperatingSystem.IsWindows()) _inputDiagnostics?.Dispose();
         _inputDiagnostics = null;
+        _windowsZoom = null;
+        _initialZoomApplied = false;
         var browser = _windowsBrowser;
         _windowsBrowser = null;
         _memoryUsageTarget = null;
@@ -380,6 +423,7 @@ public sealed partial class AiProductView : UserControl
         LogStartupStage(args.IsSuccess ? "navigation-completed" : "navigation-failed",
             _hasNavigation ? _startupClock.ElapsedMilliseconds - _navigationAt : null);
         if (!args.IsSuccess) FailLoading("navigation-failed");
+        else if (OperatingSystem.IsWindows()) ApplyInitial4KZoom();
     }
 
     private void BeginLoading()
