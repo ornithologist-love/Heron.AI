@@ -25,8 +25,10 @@ const cssModules = {
   name: 'dsh-mcp-manager-css',
   setup(builder) {
     builder.onLoad({ filter: /\.module\.css$/ }, async args => {
+      const filename = relative(root, args.path).replaceAll('\\', '/')
+      const styleId = `dsh-mcp-manager:${filename}`
       const result = transform({
-        filename: relative(root, args.path).replaceAll('\\', '/'),
+        filename,
         code: await readFile(args.path),
         cssModules: true,
         minify,
@@ -36,10 +38,10 @@ const cssModules = {
         loader: 'js',
         watchFiles: [args.path],
         contents: `
-          let style = document.querySelector('style[data-dsh-mcp-manager]');
+          let style = document.getElementById(${JSON.stringify(styleId)});
           if (!style) {
             style = document.createElement('style');
-            style.dataset.dshMcpManager = '';
+            style.id = ${JSON.stringify(styleId)};
             document.head.appendChild(style);
           }
           style.textContent = ${JSON.stringify(result.code.toString())};

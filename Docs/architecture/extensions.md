@@ -1,6 +1,6 @@
 ---
 type: architecture
-covers: [packages/common/runtime/src/heron-ai/integrations.mjs, packages/common/runtime/src/heron-ai/product-profile.mjs, packages/common/runtime/src/heron-ai/host-profile.mjs, packages/common/runtime/src/heron-ai/entrypoints.mjs, packages/common/runtime/src/heron-ai/acp/runtime/provider-directory.mjs, scripts/plugin-bundles.mjs]
+covers: [packages/common/runtime/src/heron-ai/integrations.mjs, packages/common/runtime/src/heron-ai/product-profile.mjs, packages/common/runtime/src/heron-ai/host-profile.mjs, packages/common/runtime/src/heron-ai/entrypoints.mjs, packages/common/runtime/src/heron-ai/acp/runtime/provider-directory.mjs, packages/common/runtime/src/heron-ai/mcp-manager.mjs, packages/common/runtime/src/heron-ai/connector-manifest.mjs, packages/common/runtime/src/heron-ai/agent-plugins/**, packages/common/mcp-manager/src/client/agent-plugins.tsx, packages/common/archived-sessions/**, packages/common/google-connector/**, packages/agent-plugins/linear-connector/**, packages/agent-plugins/notion-connector/**, scripts/plugin-bundles.mjs]
 ---
 
 # Heron.AI 扩展架构
@@ -50,6 +50,71 @@ DSH 与社区插件提供底座，common 提供产品通用机制，宿主与业
 技能管理器按 DSH 预设作用域读取技能。某个预设不可用时，目录标记为不完整，其他健康预设的技能仍可浏览。
 
 默认 MCP 由内容来源贡献，连接、OAuth 与工具生命周期继续由现有 MCP Manager 持有。撤下来源时断开其受管连接，保留个人地址、凭据和禁用选择，来源台账不另存口令。
+
+工具目录以当前授权下服务端返回的清单为准。左侧导航的「连接器」详情从同一个工具注册表展示已连接的工具。底层的 MCP 服务配置由运行时与插件持有。Agent 通过会话搜索按需加载命中的工具及参数。
+
+### 插件声明连接器
+
+Personal 和 Team 插件共用 DSH 插件包入口。发布方在 `package.json` 的 `heronAi.connectors` 声明卡片。连接配置沿用 `heronAi.content` 指向的 `mcp-config.json`，技能沿用 `heronAi.skills`。以下片段为已有团队知识库服务声明卡片。
+
+```json
+{
+  "heronAi": {
+    "content": { "mcp-config.json": "./context/mcp-config.json" },
+    "connectors": [
+      {
+        "id": "team-wiki",
+        "title": "团队知识库",
+        "description": { "zh": "查找团队文档", "en": "Find team documents" },
+        "icon": "./assets/wiki.svg",
+        "servers": [{ "id": "team-wiki" }]
+      }
+    ]
+  }
+}
+```
+
+一个声明对应一张卡片。`servers` 引用已有服务标识，也可以直接在服务端条目声明 `transport`、`url`/`command`、`authType`、`oauth`、`enabled` 与 `displayName`（声明式托管连接器），有多项时为每项提供 `title`。服务各自保留连接状态、授权与开关，版型筛选和旧配置决定实际可见的成员。`description` 和 `icon` 可省略，图标使用随包的 PNG 或 SVG 相对路径。启停插件时，连接器入口随同更新。自定义执行方式的插件可以通过 `settings.connectors.card` 扩展点接入连接器页的卡片和详情。
+
+### 标准 Agent Plugin
+
+[Agent Plugins Specification 1.0.0](https://agent-plugins.org/) 使用 `plugin.json`、`mcp.json` 和 `skills/` 打包可移植能力。随包目录和 `$DSH_HOME/agent-plugins/` 在启动时发现。连接器页导入的包归一化后安装到本机插件目录，确认后即时加载。移除会撤下注册并保留原始来源。`heronAi.connectors` 继续服务于存量原生声明，新建纯声明式包使用标准格式。
+
+每个标准包以清单名称标识，MCP 服务再以 `mcp.json` 的键标识。作者可通过 `io.heron-ai` 扩展提供品牌和分组。MCP Manager 处理 stdio、Streamable HTTP 和 SSE，只有包启用时才注册其工具和 Skill。技能目录先发布名称和说明，调用时读取正文。卡片详情显示所属插件及其 Skill。本机 profile 持有启停状态，MCP Manager 持有授权。再次启用同一服务可以复用已有授权，资源地址改变时需要重新授权。
+
+桌面宿主递归识别 `plugin.json` 作为 .NET 插件清单。嵌入该宿主时，随包的标准清单在组装时命名为 `agent-plugin.json`，由 AI 运行时读取。独立载荷和用户导入仍使用标准文件名 `plugin.json`。
+
+### 导入 Agent Plugin
+
+连接器的导入入口支持本地目录、ZIP 文件及本机 Claude Code、Codex、Antigravity 发现。适配器在临时目录生成标准包，预览显示来源格式、MCP、技能和校验结果。导入 Codex 可以只选择所需的 MCP 或技能。确认时安装预览过的同一份内容，目录通过同盘重命名生效；原配置和源目录仍由各自应用管理。
+
+ZIP 和目录校验拒绝链接、越界路径、重复路径和超限包。ZIP 压缩大小上限为 16 MiB，解压内容上限为 64 MiB，共 2,048 个路径条目。损坏的 MCP 配置或技能前置元数据会阻止安装。导入 stdio 时，预览展示命令与参数摘要，宿主在安装前独立检查确认。第三方原有授权由其客户端持有，导入只转移端点和可移植配置。
+
+### 导出 Agent Plugin
+
+连接器详情和 CLI 共用导出器。导出从已安装的包构建新 ZIP，保留品牌图标、技能和随包脚本。OAuth 服务在安装后由接收者授权。静态认证默认使用环境变量或本机设置。随产品安装的插件可按服务显式携带部署用 Bearer 认证，导出器从随包 MCP 声明取值。其他文件和字段仍在生成 ZIP 前检查可能的凭据。
+
+Claude Code、Codex 和 Antigravity 的原生预设用目标客户端支持的 HTTP 头传递随包认证。Agent Plugins 1.0.0 的远程端点要求 HTTPS，且禁止在标准 HTTP 头中嵌入凭据。携带认证的标准包通过随包的 stdio 程序连接服务，使用独立的程序配置保存认证，需要目标客户端支持 stdio 并能运行 Node.js。内网服务的使用者需能访问组织网络。宿主桥接和当前版型未包含的服务在 ZIP 的 README 标出。
+
+Codex 预设输出原生插件清单和随包的 MCP、技能，并自带本地插件目录清单。安装以整个插件为单位，插件页负责展示和启停。将 ZIP 交给本机 Codex 会话时，可让它解压并使用官方插件安装命令登记本地目录。Codex 插件页的本地安装入口接收插件目录来源。账号授权仍在目标客户端完成。
+
+### Google Connector
+
+Google Connector 是本机可选插件。Heron 持有 Google Workspace 账号授权，首次授权由系统浏览器、本机回调和 PKCE 完成。浏览器无法自动打开时，可在连接器详情页复制同一次授权的短期链接。宿主可预置 Desktop OAuth 客户端，个人安装可导入 Google Cloud 下载的客户端配置。用户授权和续期令牌由 Heron 凭据存储持有。工具按会话发现，实际执行只接受从本机已认证浏览器提交的回合。编辑调用通过该会话的审批服务等待用户确认。
+
+Drive、Docs、Sheets、Slides、Calendar 和 Gmail 由 Node 直接请求各自的 Google Workspace REST API。每个服务的启停保存在本机，启用的服务才进入工具发现和 Skill 列表。授权时申请启用服务的权限，执行时校验该工具所需的已授予权限。短期令牌通过 HTTPS 发送给对应 Google API，工具错误仅返回请求状态，避免把响应正文带入会话。随插件提供的服务 Skill 在用户显式调用时加载。Docs 替换预览读取同一标签范围内的文本，正式写入继续走审批。
+
+### 托管 MCP Connector
+
+Linear 和 Notion 以标准 Agent Plugin 交付。随包迁移声明将它们绑定到已有连接标识，同一服务地址上的授权和单服务开关继续有效。产品也可以由随包声明将现有原生 MCP 服务引用到连接器卡片中，让部署配置仍由原来的提供方管理。
+
+取消浏览器授权会作废该次请求。停用连接器会作废它尚未完成的浏览器授权。回调在保存令牌前再次确认请求仍有效。
+
+连接器页以等高卡片呈现未连接、连接中、已连接和连接异常四种状态。点击卡片进入详情，可管理子服务、检索工具和清理授权。用户自配服务可在「自定义 MCP 服务」区块管理。OAuth 凭据由 MCP Manager 在本机持有。
+
+### 连接器和技能
+
+主导航的「连接器」通过 `connectors.skills` 插槽接入「技能」标签页。技能管理器向该插槽注册管理面板。技能管理的唯一入口是这个标签，插槽有贡献时显示。进入连接器详情时隐藏标签栏。
 
 ## 3. 工作区数据流
 

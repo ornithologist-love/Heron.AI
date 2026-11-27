@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "linear-connector",
+  "version": "0.2.0",
+  "description": "Find and manage issues and projects with the official Linear MCP server.",
+  "extensions": {
+    "io.heron-ai": {
+      "title": "Linear",
+      "description": { "zh": "查找和管理 Issue 与项目", "en": "Find and manage issues and projects" },
+      "icon": "./assets/logo.svg",
+      "servers": {
+        "linear-connector": {
+          "existingId": "linear-connector",
+          "displayName": "Linear Connector",
+          "previousUrl": "https://mcp.linear.app/mcp/readonly",
+          "authType": "oauth",
+          "scopes": ["read", "write"]
+        }
+      }
+    }
+  }
+}

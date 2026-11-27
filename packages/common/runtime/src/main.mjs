@@ -1,20 +1,27 @@
 // One DSH base with the in-tree HeronAI supplement.
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { initializeProductContent, contentLaunchOptions } from './heron-ai/product-profile.mjs'
 
-try {
-  process.env.HERON_AI_RUNTIME_ROOT = fileURLToPath(new URL('./', import.meta.url))
+async function main(args) {
+  const hostRoot = fileURLToPath(new URL('./', import.meta.url))
+  if (args[0] === 'agent-plugin') {
+    const { runAgentPluginCommand } = await import('./heron-ai/agent-plugins/export-command.mjs')
+    await runAgentPluginCommand(args.slice(1), hostRoot)
+    return
+  }
+  process.env.HERON_AI_RUNTIME_ROOT = hostRoot
+  const { initializeProductContent, contentLaunchOptions } = await import('./heron-ai/product-profile.mjs')
+  const contentOptions = contentLaunchOptions(args)
   const { prepareStateDirectory } = await import('./heron-ai/migration/branding.mjs')
-  await prepareStateDirectory(contentLaunchOptions(process.argv.slice(2)))
-  initializeProductContent(contentLaunchOptions(process.argv.slice(2)))
+  await prepareStateDirectory(contentOptions)
+  initializeProductContent(contentOptions)
   const { launchDsh, launchOptions } = await import('./dsh/launch.mjs')
   const { prepareHeronAi } = await import('./heron-ai/bootstrap.mjs')
   const { prepareAspectOptions } = await import('./heron-ai/aspects.mjs')
   if (process.env.HERON_AI_EXIT_TRACE === '1') (await import('./heron-ai/exit-diagnostics.mjs')).startExitDiagnostics()
-  const options = launchOptions(process.argv.slice(2))
+  const options = launchOptions(args)
   options.startupStartedAt = Date.now()
-  const content = path.join(path.dirname(fileURLToPath(import.meta.url)), 'heron-ai', 'content')
+  const content = path.join(hostRoot, 'heron-ai', 'content')
   // Optional plugins contribute business content; the runtime defaults are neutral.
   if (!process.argv.includes('--skills-dir')) options.skillsDir = path.join(content, 'skills')
   if (!process.argv.includes('--templates-dir')) options.templatesDir = path.join(content, 'templates')
@@ -26,6 +33,10 @@ try {
   const include = await prepareHeronAi(options)
   process.stderr.write(`[heron-ai-dsh] preparation ${Date.now() - options.startupStartedAt}ms\n`)
   await launchDsh(options, include)
+}
+
+try {
+  await main(process.argv.slice(2))
 } catch (error) {
   let current = error
   const messages = []

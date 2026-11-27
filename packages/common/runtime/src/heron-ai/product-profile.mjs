@@ -38,24 +38,33 @@ export function registerContentSource({ id, root, files }) {
 
 // The same active-bundle selection used by the native web profile: newly
 // shipped bundles default on once; an explicit disable remains disabled.
-export function initializeProductContent({ stateDir } = {}) {
+export function readEnabledProductPackages({ stateDir } = {}) {
   stateDir ??= path.join(os.homedir(), '.heron-ai')
   stateDir = path.resolve(stateDir)
-  if (initializedState === stateDir) return
-  initializedState = stateDir
-  contentSources.clear()
-  enabledProductPackages.clear()
   const profileRoot = path.join(stateDir, 'dsh', 'profiles', 'web')
   const profile = optionalJson(path.join(profileRoot, 'package.json'))
   const shipped = optionalJson(new URL('bundled-plugins.json', content)) ?? []
   const enabled = bundledPluginSelection(profile, shipped).bundles
+  const packages = new Map()
   for (const name of enabled) {
     let manifestFile
     try { manifestFile = createRequire(path.join(profileRoot, 'package.json')).resolve(name + '/package.json') }
     catch { try { manifestFile = createRequire(path.join(hostRoot, 'package.json')).resolve(name + '/package.json') } catch { continue } }
     const manifest = json(manifestFile)
-    enabledProductPackages.set(manifest.name, { root: path.dirname(manifestFile), manifest })
-    if (manifest.heronAi?.content) registerContentSource({ id: manifest.name, root: path.dirname(manifestFile), files: manifest.heronAi.content })
+    packages.set(manifest.name, { root: path.dirname(manifestFile), manifest })
+  }
+  return packages
+}
+
+export function initializeProductContent({ stateDir } = {}) {
+  stateDir = path.resolve(stateDir ?? path.join(os.homedir(), '.heron-ai'))
+  if (initializedState === stateDir) return
+  initializedState = stateDir
+  contentSources.clear()
+  enabledProductPackages.clear()
+  for (const [id, { root, manifest }] of readEnabledProductPackages({ stateDir })) {
+    enabledProductPackages.set(id, { root, manifest })
+    if (manifest.heronAi?.content) registerContentSource({ id, root, files: manifest.heronAi.content })
   }
   for (const key of Object.keys(productProfile)) delete productProfile[key]
   Object.assign(productProfile, readContent('product.json') ?? {})

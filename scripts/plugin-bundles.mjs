@@ -5,6 +5,21 @@ import { bundleFileIncluded } from '../packages/common/runtime/src/heron-ai/pack
 
 export { bundleFileIncluded }
 
+const agentPluginSchema = 'https://agent-plugins.org/schemas/1.0.0/plugin.schema.json'
+const agentExtension = 'io.heron-ai'
+
+export function readAgentBundle(directory) {
+  const file = path.join(directory, 'plugin.json')
+  if (!fs.existsSync(file)) return undefined
+  const manifest = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''))
+  if (manifest.$schema !== agentPluginSchema || typeof manifest.name !== 'string' || manifest.name.length > 64
+    || !/^(?!.*(?:--|\.\.))[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(manifest.name))
+    throw Error('Invalid Agent Plugin bundle: ' + directory)
+  const mcpFile = path.join(directory, 'mcp.json')
+  const mcp = fs.existsSync(mcpFile) ? JSON.parse(fs.readFileSync(mcpFile, 'utf8').replace(/^\uFEFF/, '')) : undefined
+  return { manifest, mcp }
+}
+
 const nameList = value => value === undefined || Array.isArray(value)
   && value.every(name => typeof name === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name))
 
@@ -61,7 +76,22 @@ export function pluginBundleInputs(manifestFile, directories = []) {
   }
   const resolved = directories.map(directory => path.resolve(directory))
   const names = new Set()
+  const nativeDirectories = []
+  const agentDirectories = []
+  const agentNames = new Set()
   for (const directory of resolved) {
+    const agent = readAgentBundle(directory)
+    if (agent) {
+      const { manifest, mcp } = agent
+      if (agentNames.has(manifest.name)) throw Error('Duplicate bundled Agent Plugin: ' + manifest.name)
+      agentNames.add(manifest.name)
+      agentDirectories.push(directory)
+      const selection = selections.get(directory)
+      if (selection) validateSelection(directory, manifest, selection, {
+        ...mcp?.mcpServers, ...manifest.extensions?.[agentExtension]?.servers,
+      })
+      continue
+    }
     const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'package.json'), 'utf8'))
     if (!manifest.name || !manifest.dsh?.bundle?.patch) throw Error('Not a DSH bundle: ' + directory)
     const required = [manifest.main, manifest.dsh.bundle.patch, manifest.heronAi?.integration,
@@ -77,14 +107,16 @@ export function pluginBundleInputs(manifestFile, directories = []) {
     }
     if (names.has(manifest.name)) throw Error('Duplicate bundled plugin: ' + manifest.name)
     names.add(manifest.name)
+    nativeDirectories.push(directory)
     const selection = selections.get(directory)
     if (selection) validateSelection(directory, manifest, selection)
   }
-  return { directories: resolved, manifestFiles, mcpSecretsFile, selections }
+  return { directories: nativeDirectories, agentDirectories, manifestFiles, mcpSecretsFile, selections }
 }
 
 // The package declares where its skills live; a selection names only what exists.
 export function skillsRoot(manifest) {
+  if (manifest.$schema === agentPluginSchema) return 'skills'
   const root = manifest.heronAi?.skills
   if (root === undefined) return undefined
   if (typeof root !== 'string' || !root || path.isAbsolute(root) || root.split(/[\\/]/).includes('..'))
@@ -92,7 +124,7 @@ export function skillsRoot(manifest) {
   return root.replace(/[\\/]+$/, '')
 }
 
-function validateSelection(directory, manifest, { skills, mcpServers, excludeFiles }) {
+function validateSelection(directory, manifest, { skills, mcpServers, excludeFiles }, agentServers) {
   for (const relative of excludeFiles ?? [])
     if (!fs.statSync(path.join(directory, relative), { throwIfNoEntry: false })?.isFile())
       throw Error('Excluded bundle file does not exist: ' + manifest.name + '/' + relative)
@@ -105,8 +137,8 @@ function validateSelection(directory, manifest, { skills, mcpServers, excludeFil
   }
   if (mcpServers) {
     const content = manifest.heronAi?.content?.['mcp-config.json']
-    if (!content) throw Error('MCP selection needs heronAi.content mcp-config.json in ' + manifest.name)
-    const servers = JSON.parse(fs.readFileSync(path.join(directory, content), 'utf8')).mcpServers ?? {}
+    if (!content && !agentServers) throw Error('MCP selection needs heronAi.content mcp-config.json in ' + manifest.name)
+    const servers = agentServers ?? JSON.parse(fs.readFileSync(path.join(directory, content), 'utf8')).mcpServers ?? {}
     for (const name of mcpServers)
       if (!Object.hasOwn(servers, name)) throw Error('Selected MCP server does not exist: ' + manifest.name + '/' + name)
   }
@@ -127,6 +159,16 @@ export function selectedMcpServers(config, selection) {
   if (!selection?.mcpServers) return config
   return { ...config, mcpServers: Object.fromEntries(Object.entries(config.mcpServers ?? {})
     .filter(([name]) => selection.mcpServers.includes(name))) }
+}
+
+export function selectedAgentManifest(manifest, selection) {
+  const extension = manifest.extensions?.[agentExtension]
+  if (!selection?.mcpServers || !extension) return manifest
+  const includesServer = key => selection.mcpServers.includes(key)
+  const servers = extension.servers && Object.fromEntries(Object.entries(extension.servers).filter(([key]) => includesServer(key)))
+  const cards = extension.cards?.map(card => ({ ...card, servers: card.servers.filter(includesServer) }))
+    .filter(card => card.servers.length)
+  return { ...manifest, extensions: { ...manifest.extensions, [agentExtension]: { ...extension, servers, cards } } }
 }
 
 // Drops, from the copied package's Markdown, every line that links to an

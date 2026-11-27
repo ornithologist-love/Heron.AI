@@ -1,16 +1,14 @@
 /**
- * Skill Manager settings page: tiered skill lists (system / user / project),
- * project skills grouped under collapsible workspaces. Each skill row expands
- * into its directory file tree; clicking a file opens a view/edit pane
- * (writes refused for read-only system skills). The settings shell owns the
- * page chrome; this component renders only the page body.
+ * Skill Manager panel. Each row expands into its file tree and opens
+ * the editor with the access allowed by its source.
  */
 
 import React, { useEffect, useState } from 'react'
 import type {} from '../presentation-options.ts'
 import {
   IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconCodeOutlineRegular,
-  IconFolderOpenOutlineRegular, IconQuestionOutlineRegular, IconRefreshOutlineRegular, IconSkillOutlineRegular,
+  IconFolderOpenOutlineRegular, IconQuestionOutlineRegular, IconRefreshOutlineRegular,
+  IconSearchOutlineRegular, Input,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SnapshotSelectorHook } from '@deepseek-ai/dsh-client-store'
@@ -22,7 +20,7 @@ import type {
 import { SkillManagerEditor } from './skill-manager-editor.tsx'
 import styles from './skill-manager-panel.module.css'
 
-/** The inject face the slot registration binds for the settings page. */
+/** The inject face the slot registration binds for the Skills tab. */
 export interface SkillManagerInjected {
   /** Wire operations through the host endpoints. */
   controller: SkillManagerController
@@ -47,6 +45,8 @@ interface RowShared {
   refreshAfterMutation: () => void
   /** Surface an error message at the page level. */
   reportError: (message: string) => void
+  /** Keep matching groups visible while searching. */
+  searching: boolean
   t: SkillManagerInjected['t']
   controller: SkillManagerController
 }
@@ -248,7 +248,8 @@ function FileNode({ node, shared, writable, depth }: {
 /** One workspace collapsible group of project skills. */
 function WorkspaceGroup({ group, shared }: { group: WorkspaceSkillGroup; shared: RowShared }) {
   const { t, controller } = shared
-  const [open, setOpen] = useState(true)
+  const [expanded, setOpen] = useState(true)
+  const open = shared.searching || expanded
   return (
     <section className={styles.workspaceGroup}>
       <div className={styles.workspaceHeaderRow}>
@@ -281,7 +282,8 @@ function WorkspaceGroup({ group, shared }: { group: WorkspaceSkillGroup; shared:
 /** One preset collapsible group of preset-provided skills. */
 function PresetGroup({ group, shared }: { group: PresetSkillGroup; shared: RowShared }) {
   const { t } = shared
-  const [open, setOpen] = useState(true)
+  const [expanded, setOpen] = useState(true)
+  const open = shared.searching || expanded
   return (
     <section className={styles.workspaceGroup}>
       <button type="button" className={styles.workspaceHeader} onClick={() => setOpen(v => !v)} aria-expanded={open}>
@@ -302,7 +304,8 @@ function PresetGroup({ group, shared }: { group: PresetSkillGroup; shared: RowSh
 /** One plugin-provider collapsible group of bundled plugin skills. */
 function PluginGroup({ group, shared }: { group: PluginSkillGroup; shared: RowShared }) {
   const { t } = shared
-  const [open, setOpen] = useState(true)
+  const [expanded, setOpen] = useState(true)
+  const open = shared.searching || expanded
   return (
     <section className={styles.workspaceGroup}>
       <button type="button" className={styles.workspaceHeader} onClick={() => setOpen(v => !v)} aria-expanded={open}>
@@ -321,16 +324,18 @@ function PluginGroup({ group, shared }: { group: PluginSkillGroup; shared: RowSh
 }
 
 /** One collapsible top-level tier (system / user / preset / project), closed by default. */
-function TierSection({ title, hint, info, count, t, extra, children }: {
+function TierSection({ title, hint, info, count, t, extra, searching, children }: {
   title: string
   hint: string
   info?: string
   count: number
   t: SkillManagerInjected['t']
   extra?: React.ReactNode
+  searching: boolean
   children: React.ReactNode
 }) {
-  const [open, setOpen] = useState(false)
+  const [expanded, setOpen] = useState(false)
+  const open = searching || expanded
   return (
     <section className={styles.tier}>
       <div className={styles.tierHeaderRow}>
@@ -408,7 +413,7 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Render the Skill Manager settings page body.
+ * Render the Skill Manager panel.
  * @param props - inject face (spread flat by the outlet).
  * @returns the page element tree.
  */
@@ -423,16 +428,21 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
     else refresh()
   }
   const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const query = search.trim().toLowerCase()
+  const searching = query.length > 0
+  const matches = ({ name, description, provider }: SkillManagerEntry): boolean =>
+    !searching || [name, description, provider].some(part => part.toLowerCase().includes(query))
   const shared: RowShared = {
     fileTrees: state.fileTrees,
     refreshAfterMutation,
     reportError: (message: string) => setError(message),
+    searching,
     t,
     controller,
   }
 
-  // The settings shell mounts this page on open; a fresh catalog read at
-  // mount keeps the page from showing stale rows.
+  // Refresh when the Skills tab mounts.
   useEffect(() => {
     refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -450,31 +460,54 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
     const presetSection = findSection(group.id)
     const remainingSkills: SkillManagerEntry[] = []
     for (const row of group.skills) {
+      if (!matches(row)) continue
       const section = findSection(row.provider) ?? presetSection
       if (section === undefined) remainingSkills.push(row)
       else addSkill(section, row)
     }
     if (remainingSkills.length > 0) remainingPresetGroups.push({ ...group, skills: remainingSkills })
   }
-  const remainingPluginGroups = state.pluginGroups.filter(group => {
+  const remainingPluginGroups: PluginSkillGroup[] = []
+  for (const group of state.pluginGroups) {
+    const skills = group.skills.filter(matches)
+    if (skills.length === 0) continue
     const section = findSection(group.provider)
-    if (section === undefined) return true
-    for (const row of group.skills) addSkill(section, row)
-    return false
-  })
+    if (section === undefined) remainingPluginGroups.push({ ...group, skills })
+    else for (const row of skills) addSkill(section, row)
+  }
+  const systemSkills = state.byTier.system.filter(matches)
+  const userSkills = state.byTier.user.filter(matches)
+  const projectGroups = searching
+    ? state.projectGroups.map(group => ({ ...group, skills: group.skills.filter(matches) })).filter(group => group.skills.length > 0)
+    : state.projectGroups
+  const visibleSections = searching ? sectionBuckets.filter(section => section.skills.size > 0) : sectionBuckets
+  const noMatches = searching && state.error === null && [
+    systemSkills, userSkills, projectGroups, remainingPresetGroups, remainingPluginGroups, visibleSections,
+  ].every(group => group.length === 0)
+
+  const renderRows = (skills: SkillManagerEntry[]) => (
+    <ul className={styles.rows}>
+      {skills.map(row => <SkillRow key={`${row.provider}:${row.name}`} row={row} shared={shared} />)}
+    </ul>
+  )
 
   return (
     <div className={styles.page} data-skill-manager-page>
       <header className={styles.header}>
-        <div className={styles.heading}>
-          <IconSkillOutlineRegular size={16} />
-          <h2 className={styles.title}>{t('title')}</h2>
+        <div className={styles.headerActions}>
+          <Input
+            className={styles.search}
+            icon={<IconSearchOutlineRegular size={14} />}
+            aria-label={t('search')}
+            placeholder={t('search')}
+            value={search}
+            onChange={event => setSearch(event.currentTarget.value)}
+          />
+          <button type="button" className={styles.iconButton} aria-label={t('refresh')} onClick={refresh}>
+            <IconRefreshOutlineRegular size={14} />
+          </button>
         </div>
-        <button type="button" className={styles.iconButton} aria-label={t('refresh')} onClick={refresh}>
-          <IconRefreshOutlineRegular size={14} />
-        </button>
       </header>
-      <p className={styles.intro}>{t('intro')}</p>
       {error !== null && <p className={styles.error} data-skill-error>{error}</p>}
       {state.loading
         ? <p className={styles.notice}>{t('loading')}</p>
@@ -482,14 +515,42 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
           <>
             {state.error !== null && <p className={styles.error}>{t('error', { message: state.error })}</p>}
             {!state.complete && <p className={styles.notice}>{t('incomplete')}</p>}
+            {noMatches && <p className={styles.notice}>{t('noMatches')}</p>}
             <div className={styles.tiers}>
-              {sectionBuckets.map(({ rule, skills }) => (
+              {systemSkills.length > 0 && (
+                <TierSection title={t('tierSystem')} hint={t('tierSystemHint')} info={t('tierSystemInfo')} count={systemSkills.length} searching={searching} t={t}>
+                  {renderRows(systemSkills)}
+                </TierSection>
+              )}
+              {(!searching || userSkills.length > 0) && (
+                <TierSection
+                  title={t('tierUser')}
+                  hint={t('tierUserHint')}
+                  info={t('tierUserInfo')}
+                  count={userSkills.length}
+                  searching={searching}
+                  t={t}
+                  extra={<ImportButton
+                    tier="user"
+                    controller={controller}
+                    t={t}
+                    onDone={refreshAfterMutation}
+                    onError={message => setError(t('importFail', { message }))}
+                  />}
+                >
+                  {renderRows(userSkills)}
+                  {userSkills.length === 0 && <p className={styles.empty}>{t('empty')}</p>}
+                </TierSection>
+              )}
+
+              {visibleSections.map(({ rule, skills }) => (
                 <TierSection
                   key={rule.id}
                   title={rule.title}
                   hint={rule.hint ?? ''}
                   info={rule.info}
                   count={skills.size}
+                  searching={searching}
                   t={t}
                 >
                   <ul className={styles.rows}>
@@ -505,6 +566,7 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
                   hint={t('tierPluginHint')}
                   info={t('tierPluginInfo')}
                   count={remainingPluginGroups.reduce((n, g) => n + g.skills.length, 0)}
+                  searching={searching}
                   t={t}
                 >
                   <div className={styles.workspaces}>
@@ -519,6 +581,7 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
                   hint={t('tierCustomHint')}
                   info={t('tierCustomInfo')}
                   count={remainingPresetGroups.reduce((n, g) => n + g.skills.length, 0)}
+                  searching={searching}
                   t={t}
                 >
                   <div className={styles.workspaces}>
@@ -527,23 +590,24 @@ export function SkillManagerPanel({ usePanel, refresh, refreshSilent, t, control
                 </TierSection>
               )}
 
-              <TierSection
-                title={t('tierProject')}
-                hint={t('tierProjectHint')}
-                info={t('tierProjectInfo')}
-                count={state.projectGroups.reduce((n, g) => n + g.skills.length, 0)}
-                t={t}
-              >
-                <div className={styles.workspaces}>
-                  {state.projectGroups.map(group => <WorkspaceGroup key={group.id ?? group.title} group={group} shared={shared} />)}
-                </div>
-                {state.projectGroups.length === 0 && <p className={styles.empty}>{t('empty')}</p>}
-              </TierSection>
+              {(!searching || projectGroups.length > 0) && (
+                <TierSection
+                  title={t('tierProject')}
+                  hint={t('tierProjectHint')}
+                  info={t('tierProjectInfo')}
+                  count={projectGroups.reduce((n, g) => n + g.skills.length, 0)}
+                  searching={searching}
+                  t={t}
+                >
+                  <div className={styles.workspaces}>
+                    {projectGroups.map(group => <WorkspaceGroup key={group.id ?? group.title} group={group} shared={shared} />)}
+                  </div>
+                  {projectGroups.length === 0 && <p className={styles.empty}>{t('empty')}</p>}
+                </TierSection>
+              )}
             </div>
           </>
         )}
-      {/* The file editor renders as a fixed full-viewport window above the
-          settings shell; it self-hides while no file is open. */}
       <SkillManagerEditor usePanel={usePanel} controller={controller} t={t} />
     </div>
   )

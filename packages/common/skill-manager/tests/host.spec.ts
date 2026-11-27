@@ -118,14 +118,16 @@ describe('dsh-skill-manager host half', () => {
     expect(result.value.skills[0]).toMatchObject({ name: 'sys-a', tier: 'system', readOnly: true })
   })
 
-  it('classifies bundled skills from a plugin provider as read-only plugin rows', async () => {
+  it('classifies bundled and imported plugin skills as read-only plugin rows', async () => {
     const { registered } = await bench([
       { name: 'p-a', description: 'plugin skill', source: 'bundled', provider: 'aegis-method-pack', invocation: { modelInvocable: true, userInvocable: true } },
+      { name: 'p-b', description: 'plugin skill', source: 'agent-plugin', provider: 'agent-plugin-example', invocation: { modelInvocable: true, userInvocable: true } },
     ])
     expect(registered).toBeDefined()
     const result = await registered!.handler('list', {}) as { ok: true; value: { skills: { name: string; tier: string; readOnly: boolean; provider: string }[] } }
     expect(result.ok).toBe(true)
     expect(result.value.skills[0]).toMatchObject({ name: 'p-a', tier: 'plugin', readOnly: true, provider: 'aegis-method-pack' })
+    expect(result.value.skills[1]).toMatchObject({ name: 'p-b', tier: 'plugin', readOnly: true, provider: 'agent-plugin-example' })
   })
 
   it('classifies user, custom and runtime sources into their tiers', async () => {

@@ -232,6 +232,7 @@ importers:
         specifier: link:../../dsh/vendor/schemastery
         version: link:../../dsh/vendor/schemastery
 
+  packages/common/google-connector: {}
 
   packages/common/mcp-manager:
     dependencies:
@@ -275,88 +276,6 @@ importers:
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
-
-  packages/common/skill-manager:
-    dependencies:
-      '@deepseek-ai/cordis':
-        specifier: link:../../dsh/vendor/cordis
-        version: link:../../dsh/vendor/cordis
-      '@deepseek-ai/dsh-skill-filesystem':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/skill/skill-filesystem
-      fflate:
-        specifier: ^0.8.2
-        version: 0.8.3
-      immer:
-        specifier: ^10.1.1
-        version: 10.2.0
-      yaml:
-        specifier: ^2.9.0
-        version: 2.9.1
-    devDependencies:
-      '@deepseek-ai/dsh-agent-preset-registry':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/preset/agent-preset-registry
-      '@deepseek-ai/dsh-api-remotes':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/api/remotes
-      '@deepseek-ai/dsh-client-connection':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/connection
-      '@deepseek-ai/dsh-client-locale':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/locale
-      '@deepseek-ai/dsh-client-store':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/store
-      '@deepseek-ai/dsh-client-ui-layout':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/ui-layout
-      '@deepseek-ai/dsh-client-ui-primitives':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/ui-primitives
-      '@deepseek-ai/dsh-client-ui-renderer':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/ui-renderer
-      '@deepseek-ai/dsh-client-ui-settings':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/ui-settings
-      '@deepseek-ai/dsh-client-ui-slots':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/client/ui-slots
-      '@deepseek-ai/dsh-host-webserver':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/host/webserver
-      '@deepseek-ai/dsh-session':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/core/session
-      '@deepseek-ai/dsh-skill':
-        specifier: 0.2.2-rc.5
-        version: link:../../dsh/packages/skill/skill
-      '@types/node':
-        specifier: 24.0.0
-        version: 24.0.0
-      '@types/react':
-        specifier: 18.3.1
-        version: 18.3.1
-      happy-dom:
-        specifier: 20.11.2
-        version: 20.11.2
-      lightningcss:
-        specifier: 1.32.0
-        version: 1.32.0
-      react:
-        specifier: 18.3.1
-        version: 18.3.1
-      tsdown:
-        specifier: 0.22.2
-        version: 0.22.2(publint@0.3.25)(tsx@4.23.15)(typescript@6.0.3)(unrun@0.2.39)
-      typescript:
-        specifier: 6.0.3
-        version: 6.0.3
-      vitest:
-        specifier: 3.2.4
-        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.0.0)(happy-dom@20.11.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(supports-color@9.4.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/common/runtime:
     dependencies:
@@ -1110,12 +1029,21 @@ importers:
       dsh-skill-manager:
         specifier: 0.3.2
         version: link:../skill-manager
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       js-yaml:
         specifier: 4.1.1
         version: 4.1.1
+      smol-toml:
+        specifier: 1.9.1
+        version: 1.9.1
       ws:
         specifier: ^8.18.0
         version: 8.21.3
+      yauzl:
+        specifier: 3.4.0
+        version: 3.4.0
       zod:
         specifier: 4.6.6
         version: 4.6.6
@@ -1126,6 +1054,85 @@ importers:
       '@heron-ai/dsh-build':
         specifier: 1.0.0
         version: link:../../../scripts/dsh-build
+
+  packages/common/skill-manager:
+    dependencies:
+      '@deepseek-ai/cordis':
+        specifier: link:../../dsh/vendor/cordis
+        version: link:../../dsh/vendor/cordis
+      '@deepseek-ai/dsh-skill-filesystem':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/skill/skill-filesystem
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
+      immer:
+        specifier: ^10.1.1
+        version: 10.2.0
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.1
+    devDependencies:
+      '@deepseek-ai/dsh-agent-preset-registry':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/preset/agent-preset-registry
+      '@deepseek-ai/dsh-api-remotes':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/api/remotes
+      '@deepseek-ai/dsh-client-connection':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/connection
+      '@deepseek-ai/dsh-client-locale':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/locale
+      '@deepseek-ai/dsh-client-store':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/store
+      '@deepseek-ai/dsh-client-ui-layout':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/ui-layout
+      '@deepseek-ai/dsh-client-ui-primitives':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/ui-primitives
+      '@deepseek-ai/dsh-client-ui-renderer':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/ui-renderer
+      '@deepseek-ai/dsh-client-ui-slots':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/client/ui-slots
+      '@deepseek-ai/dsh-host-webserver':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/host/webserver
+      '@deepseek-ai/dsh-session':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/core/session
+      '@deepseek-ai/dsh-skill':
+        specifier: 0.2.2-rc.5
+        version: link:../../dsh/packages/skill/skill
+      '@types/node':
+        specifier: 24.0.0
+        version: 24.0.0
+      '@types/react':
+        specifier: 18.3.1
+        version: 18.3.1
+      happy-dom:
+        specifier: 20.11.2
+        version: 20.11.2
+      lightningcss:
+        specifier: 1.32.0
+        version: 1.32.0
+      react:
+        specifier: 18.3.1
+        version: 18.3.1
+      tsdown:
+        specifier: 0.22.2
+        version: 0.22.2(publint@0.3.25)(tsx@4.23.15)(typescript@6.0.3)(unrun@0.2.39)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 3.2.4
+        version: 3.2.4(@types/debug@4.1.13)(@types/node@24.0.0)(happy-dom@20.11.2)(jiti@2.7.0)(jsdom@29.1.1(@noble/hashes@2.4.0))(lightningcss@1.32.0)(supports-color@9.4.0)(tsx@4.23.15)(yaml@2.9.1)
 
   packages/common/toolbar: {}
 

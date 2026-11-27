@@ -1,10 +1,7 @@
-/** Copy dictionaries for the Skill Manager settings page. */
+/** Copy dictionaries for the Skill Manager tab. */
 
 /** English strings (the key-set source of truth for this pair). */
 export const en = {
-  nav: 'Skill Manager',
-  title: 'Skill Manager',
-  intro: 'Browse the skills this project can see. Read-only sources can be inspected and exported.',
   tierSystem: 'System',
   tierUser: 'User',
   tierProject: 'Workspaces',
@@ -25,6 +22,8 @@ export const en = {
   empty: 'No skills found in this tier.',
   emptyTree: 'This skill has no readable files.',
   refresh: 'Refresh',
+  search: 'Search skills',
+  noMatches: 'No matching skills.',
   loading: 'Loading…',
   error: 'Could not load: {message}',
   incomplete: 'Catalog discovery was incomplete; showing what is available.',
@@ -60,9 +59,6 @@ export const en = {
 
 /** Chinese strings (product copy language). */
 export const zh = {
-  nav: '技能管理',
-  title: '技能管理',
-  intro: '浏览当前项目可见的技能。只读来源支持查看与导出。',
   tierSystem: '系统',
   tierUser: '用户',
   tierProject: '工作区',
@@ -83,6 +79,8 @@ export const zh = {
   empty: '该分类下没有技能。',
   emptyTree: '该技能没有可读文件。',
   refresh: '刷新',
+  search: '搜索技能',
+  noMatches: '没有匹配的技能。',
   loading: '加载中…',
   error: '加载失败：{message}',
   incomplete: '目录发现不完整，仅显示当前可用项。',

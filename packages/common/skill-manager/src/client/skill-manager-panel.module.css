@@ -1,6 +1,4 @@
-/* Skill Manager settings page body — content inside the native settings
-   shell (the shell owns the panel chrome, nav rail and header). All colors
-   ride theme tokens so the page follows light/dark mode. */
+/* Skill Manager content in the Connectors tab. */
 
 .page {
   display: flex;
@@ -14,20 +12,20 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
-.heading {
+.headerActions {
   display: flex;
-  align-items: center;
   gap: 8px;
-  color: var(--dsw-alias-label-primary);
+  align-items: center;
+  flex: 0 1 360px;
+  min-width: 0;
 }
 
-.title {
-  margin: 0;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 500;
+.search {
+  flex: 1;
+  min-width: 0;
 }
 
 /* Compact circular icon button, same rhythm as the shell's close button. */
@@ -36,6 +34,7 @@
   align-items: center;
   justify-content: center;
   width: 28px;
+  flex-shrink: 0;
   height: 28px;
   padding: 0;
   border: none;
@@ -47,13 +46,6 @@
 
 .iconButton:hover {
   background: var(--dsw-alias-interactive-bg-hover);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.intro {
-  margin: 0;
-  font-size: 13px;
-  line-height: 20px;
   color: var(--dsw-alias-label-secondary);
 }
 

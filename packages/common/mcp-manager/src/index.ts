@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, unwatchFile, watchFile
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { apply as mcpClientApply } from '@deepseek-ai/dsh-mcp-client'
+import { apply as mcpClientApply, connectionStatusOf } from '@deepseek-ai/dsh-mcp-client'
 import type {} from '@deepseek-ai/dsh-tools'
 import {
   discoverOAuthServerInfo,
@@ -28,6 +28,23 @@ import {
   refreshAuthorization,
 } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
+import {
+  AGENT_PLUGIN_DISCOVERY_SOURCES, AGENT_PLUGIN_ZIP_LIMIT,
+  type AgentPluginCandidate, type AgentPluginCommitInput, type AgentPluginDiscoverySource,
+  type AgentPluginImportInput, type AgentPluginPreview,
+} from './agent-plugin-import-contract.ts'
+
+interface ConnectorBrand {
+  title: string
+  description: { zh: string; en: string }
+  /** Packaged SVG or PNG data URL supplied by the connector. */
+  icon?: string
+}
+
+export interface ConnectorPresentation extends ConnectorBrand {
+  id?: string
+  group?: ConnectorBrand & { id: string }
+}
 
 /** Optional embedding policy; the manager keeps ownership of routes and connections. */
 export interface McpManagerIntegration {
@@ -37,6 +54,22 @@ export interface McpManagerIntegration {
   isAvailable?(entry: McpServerEntry): boolean
   /** Override activation for this process without changing the saved enable flag. */
   isEnabled?(entry: McpServerEntry): boolean
+  /** Display metadata for a managed connector contributed by an installed plugin. */
+  connectorPresentation?(entry: McpServerEntry): ConnectorPresentation | undefined
+  agentPlugins?: {
+    list(): ReadonlyArray<{
+      id: string; name: string; description: { zh: string; en: string }; icon?: string
+      enabled: boolean; imported: boolean; connectorIds: string[]; skills: Array<{ name: string; description: string }>
+    }>
+    canManage(request: import('node:http').IncomingMessage): boolean
+    preview(input: AgentPluginImportInput): Promise<AgentPluginPreview>
+    discover(source: AgentPluginDiscoverySource): Promise<AgentPluginCandidate[]>
+    commit(input: AgentPluginCommitInput): Promise<void>
+    discard(id: string): Promise<void>
+    setEnabled(id: string, enabled: boolean): Promise<void>
+    remove(id: string, afterUnmount?: () => Promise<void>): Promise<void>
+    export(id: string, format: string): Promise<{ fileName: string; bytes: Uint8Array } | undefined>
+  }
   /** Product-owned server names. Unlisted servers remain available to every product. */
   products?: {
     /** No active product hides all product-owned servers. */
@@ -132,8 +165,12 @@ export interface McpServerOAuthConfig {
 export interface McpServerEntry {
   /** Namespace for model-facing tool names (`mcp__<serverName>__<rawName>`). */
   serverName: string
+  /** Display label for a connector whose connection settings are owned by its plugin. */
+  managedConnector?: string
+  /** Persistent owner for a standard Agent Plugin connection. */
+  agentPlugin?: string
   /** `stdio` spawns a child process; `streamable-http` talks HTTP/SSE. */
-  transport: 'stdio' | 'streamable-http'
+  transport: 'stdio' | 'streamable-http' | 'sse'
   /** streamable-http: MCP endpoint URL. */
   url?: string
   /** streamable-http: extra request headers (e.g. auth tokens). */
@@ -198,6 +235,46 @@ export interface StoredState {
 
 const SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]{1,32}$/
 const MAX_BODY_BYTES = 1_000_000
+
+class AgentPluginUploadTooLarge extends Error {}
+
+function isAgentPluginSource(value: unknown): value is AgentPluginDiscoverySource {
+  return AGENT_PLUGIN_DISCOVERY_SOURCES.some(source => source === value)
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
+// Keep the ZIP stream separate from the small JSON API body limit. Drain an
+// oversized stream without buffering it so the browser can still read the 413.
+function readAgentPluginZip(req: import('node:http').IncomingMessage): Promise<Buffer> {
+  const sizeHeader = Number(req.headers['content-length'])
+  if (sizeHeader > AGENT_PLUGIN_ZIP_LIMIT) {
+    req.resume()
+    return Promise.reject(new AgentPluginUploadTooLarge())
+  }
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    let oversized = false
+    req.on('data', (chunk: Buffer) => {
+      if (oversized) return
+      size += chunk.length
+      if (size > AGENT_PLUGIN_ZIP_LIMIT) {
+        oversized = true
+        chunks.length = 0
+        reject(new AgentPluginUploadTooLarge())
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (!oversized) resolve(Buffer.concat(chunks, size))
+    })
+    req.on('error', reject)
+  })
+}
 
 /**
  * Plugin version surfaced by the health endpoint. Injected at build time from
@@ -266,7 +343,7 @@ function toMcpConfig(entry: McpServerEntry, resolvedHeaders?: Record<string, str
   }
   return entry.transport === 'stdio'
     ? { ...base, command: entry.command, args: entry.args, env: entry.env, cwd: entry.cwd }
-    : { ...base, url: entry.url, headers: resolvedHeaders ?? entry.headers }
+    : { ...base, url: entry.url, headers: resolvedHeaders ?? entry.headers, restrictRedirects: entry.agentPlugin ? true : undefined }
 }
 
 function escapeHtml(str: string): string {
@@ -301,6 +378,32 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
   // Keep the complete file in memory so saving one product never removes another's entries.
   const visibleEntries = (): McpServerEntry[] => state.servers.filter(entry => available(entry.serverName, entry))
   const isEnabled = (entry: McpServerEntry): boolean => integration?.isEnabled?.(entry) ?? entry.enabled !== false
+  const toolPrefix = (serverName: string) => `mcp__${serverName}__`
+  const serverToolSchemas = (serverName: string) => {
+    const prefix = toolPrefix(serverName)
+    return ctx.tools.schemas().filter(schema => schema.name.startsWith(prefix))
+  }
+  function serverView(entry: McpServerEntry, presentation = integration?.connectorPresentation?.(entry)) {
+    const prefix = toolPrefix(entry.serverName)
+    const toolNames = serverToolSchemas(entry.serverName).map(schema => schema.name.slice(prefix.length))
+    if (!entry.managedConnector && !presentation) return { ...entry, toolNames }
+    return {
+      serverName: entry.serverName, enabled: isEnabled(entry), authType: entry.authType,
+      agentPluginId: entry.agentPlugin?.split(':', 1)[0],
+      authorized: Boolean(entry.oauth?.tokens?.accessToken), toolNames,
+      connectorPresentation: presentation && {
+        id: presentation.id,
+        title: presentation.title,
+        description: { zh: presentation.description.zh, en: presentation.description.en },
+        icon: presentation.icon,
+        group: presentation.group && {
+          id: presentation.group.id, title: presentation.group.title,
+          description: { zh: presentation.group.description.zh, en: presentation.group.description.en },
+          icon: presentation.group.icon,
+        },
+      },
+    }
+  }
 
   // Cordis log records are not necessarily forwarded to an embedding host.
   // stderr is the host-visible diagnostic channel in both Debug and Release.
@@ -423,21 +526,32 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
   const pendingOAuthSessions = new Map<string, PendingOAuthSession>()
   // The system browser has no WebView opener. Keep a short-lived result for
   // the initiating settings page to observe without exposing any credentials.
-  const oauthResults = new Map<string, {
+  interface OAuthResult {
     serverName: string; status: 'pending' | 'authorized' | 'error'; error?: string; createdAt: number; lastDiagnosticAt?: number
-  }>()
+    web?: boolean
+  }
+  const oauthResults = new Map<string, OAuthResult>()
   const authorizationJobs = new Map<string, Promise<void>>()
   const lifetime = new AbortController()
+  const cancelledAuthorization = 'OAuth authorization was cancelled.'
+
+  function cancelOAuthAttempt(stateVal: string, result: OAuthResult): void {
+    if (result.status !== 'pending') return
+    pendingOAuthSessions.delete(stateVal)
+    result.status = 'error'
+    result.error = cancelledAuthorization
+    diagnostic(result.serverName, 'oauth-cancelled')
+  }
 
   // Both the settings page and an explicit capability click use this same
   // PKCE flow, callback, token store and managed connection.
   async function beginOAuth(body: {
     serverName: string; url?: string; clientId?: string; clientSecret?: string; scopes?: string[]; redirectUri?: string
-  }, defaultRedirectUri: string) {
+  }, defaultRedirectUri: string, webState?: string) {
     diagnostic(body.serverName, 'oauth-start')
     const entry = findEntry(body.serverName)
     const targetUrl = body.url || entry?.url
-    if (!targetUrl || !available(body.serverName, { ...entry, serverName: body.serverName, transport: 'streamable-http', url: targetUrl }))
+    if (!targetUrl || !available(body.serverName, { ...entry, serverName: body.serverName, transport: entry?.transport ?? 'streamable-http', url: targetUrl }))
       throw new Error('MCP server is unavailable for authorization.')
     const serverInfo = await discoverOAuthServerInfo(targetUrl).catch(() => ({
       authorizationServerUrl: targetUrl, authorizationServerMetadata: undefined, resourceMetadata: undefined,
@@ -453,7 +567,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
     // registered for another sidecar port or host, or migrated from another
     // product without a record — is rejected by the authorization server
     // before sign-in, so a fresh client is registered instead.
-    const userClient = body.clientId && body.clientId !== saved?.clientId ? body.clientId : undefined
+    const userClient = !entry?.managedConnector && body.clientId && body.clientId !== saved?.clientId ? body.clientId : undefined
     const canRegister = Boolean(serverInfo.authorizationServerMetadata?.registration_endpoint)
     const keepSaved = !userClient && Boolean(saved?.clientId) && (
       saved?.userProvided === true
@@ -475,17 +589,23 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
     if (saved?.clientId && !keepSaved && !userClient)
       ctx.logger.info(`mcp-manager: "${body.serverName}" OAuth client ${saved.clientId} is not registered for ${redirectUri}; registered ${clientInformation.client_id}`)
     const resource = serverInfo.resourceMetadata?.resource || targetUrl
-    const stateVal = randomBytes(16).toString('hex')
+    const stateVal = webState ?? randomBytes(16).toString('hex')
     const { authorizationUrl, codeVerifier } = await startAuthorization(authServerUrl, {
       metadata: serverInfo.authorizationServerMetadata, clientInformation, redirectUrl: redirectUri,
-      scope: body.scopes?.join(' ') || entry?.oauth?.scopes?.join(' '), state: stateVal, resource: new URL(resource),
+      scope: (!entry?.managedConnector && body.scopes?.join(' ')) || entry?.oauth?.scopes?.join(' '),
+      state: stateVal, resource: new URL(resource),
     })
+    if (webState !== undefined && oauthResults.get(webState)?.status !== 'pending') {
+      throw new Error(cancelledAuthorization)
+    }
     pendingOAuthSessions.set(stateVal, {
       state: stateVal, serverName: body.serverName, url: targetUrl, codeVerifier, redirectUri, resource,
       authorizationServerUrl: authServerUrl, metadata: serverInfo.authorizationServerMetadata,
       clientInformation, ...registration, createdAt: Date.now(),
     })
-    oauthResults.set(stateVal, { serverName: body.serverName, status: 'pending', createdAt: Date.now() })
+    if (webState === undefined) {
+      oauthResults.set(stateVal, { serverName: body.serverName, status: 'pending', createdAt: Date.now() })
+    }
     return { ok: true, authorizationUrl: authorizationUrl.toString(), state: stateVal, redirectUri }
   }
 
@@ -562,6 +682,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
 
     try {
       const resolvedHeaders = await resolveEntryHeaders(entry, () => saveState(path, state))
+      if (!available(entry.serverName, entry)) return
       const fiber = ctx.plugin(mcpClientApply, toMcpConfig(entry, resolvedHeaders, integration) as any)
       fibers.set(entry.serverName, fiber)
       await fiber
@@ -618,12 +739,11 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
       connectingSince.delete(entry.serverName)
       return { status: 'error', toolCount: 0, error }
     }
-    const mounted = fibers.has(entry.serverName)
+    const fiber = fibers.get(entry.serverName)
     const since = connectingSince.get(entry.serverName)
-    if (!mounted && since === undefined) return { status: 'disconnected', toolCount: 0 }
-    const prefix = `mcp__${entry.serverName}__`
-    const toolCount = mounted ? ctx.tools.schemas().filter(schema => schema.name.startsWith(prefix)).length : 0
-    if (toolCount > 0) {
+    if (!fiber && since === undefined) return { status: 'disconnected', toolCount: 0 }
+    const toolCount = fiber ? serverToolSchemas(entry.serverName).length : 0
+    if (toolCount > 0 || (fiber && entry.managedConnector && connectionStatusOf(fiber)?.current().state === 'connected')) {
       connectingSince.delete(entry.serverName)
       return { status: 'connected', toolCount }
     }
@@ -642,10 +762,10 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
   const requireConnected = (serverName: string): void => {
     const entry = visibleEntries().find(candidate => candidate.serverName === serverName)
     if (!entry || statusOf(entry).status !== 'connected') {
-      throw new Error(`MCP server "${serverName}" is unavailable; enable and authorize it in MCP settings.`)
+      throw new Error(`Connection "${serverName}" is unavailable. Enable and authorize it on the Connectors page.`)
     }
   }
-  ctx.provide('mcpManager', {
+  const service: ManagedMcpServers = {
     servers: () => visibleEntries().map(entry => {
       const { status, toolCount } = statusOf(entry)
       return { serverName: entry.serverName, status, toolCount }
@@ -664,14 +784,14 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
         await Promise.race([
           connection,
           delay(CONNECT_TIMEOUT_MS, undefined, { signal: AbortSignal.any([signal, waiting.signal]) }).then(() => {
-            throw new Error('MCP connection timed out; retry in MCP settings.')
+            throw new Error('Connection timed out. Retry on the Connectors page.')
           }),
         ])
       } finally { waiting.abort() }
       while (statusOf(entry).status === 'connecting')
         await delay(250, undefined, { signal })
       if (statusOf(entry).status !== 'connected')
-        throw new Error(statusOf(entry).error || 'MCP connection failed; retry in MCP settings.')
+        throw new Error(statusOf(entry).error || 'Connection failed. Retry on the Connectors page.')
     },
     async ensureConnected(serverName, { interactive, signal, onPhase }) {
       signal.throwIfAborted()
@@ -694,7 +814,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
           const message = failure instanceof Error ? failure.message : statusOf(entry).error ?? ''
           if (entry.authType !== 'oauth' || (entry.oauth?.tokens?.accessToken && !/OAuth|\b401\b|unauthorized|invalid[_ ]token|invalid_grant/i.test(message)))
             throw new Error(message || 'The managed MCP server could not connect.')
-          if (!integration?.openAuthorizationUrl) throw new Error('Complete OAuth authorization in MCP settings.')
+          if (!integration?.openAuthorizationUrl) throw new Error('Complete authorization on the Connectors page.')
           const authorization = await beginOAuth({ serverName }, `http://127.0.0.1:${ctx.webServer.port}/mcp-manager/api/oauth/callback`)
           try {
             waitSignal.throwIfAborted()
@@ -706,7 +826,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
               if (!visibleEntries().some(candidate => candidate.serverName === serverName && isEnabled(candidate))) throw new Error('The managed MCP server is unavailable.')
               const result = oauthResults.get(authorization.state)
               if (result?.status === 'error' || (result?.status === 'authorized' && statusOf(entry).status === 'error'))
-                throw new Error('OAuth authorization or connection failed; retry in MCP settings.')
+                throw new Error('Authorization or connection failed. Retry on the Connectors page.')
             }
           } finally { pendingOAuthSessions.delete(authorization.state) }
         })().finally(() => { authorizationJobs.delete(serverName) })
@@ -725,11 +845,11 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
     },
     tools(serverName) {
       requireConnected(serverName)
-      return ctx.tools.schemas().filter(tool => tool.name.startsWith(`mcp__${serverName}__`))
+      return serverToolSchemas(serverName)
     },
     async callTool(serverName, execution) {
       requireConnected(serverName)
-      if (!execution.name.startsWith(`mcp__${serverName}__`)
+      if (!execution.name.startsWith(toolPrefix(serverName))
         || ctx.tools.get(execution.name) === undefined
         || ctx.tools.get(execution.name) !== ctx.tools.get(execution.name, execution.agent)) {
         throw new Error('The managed MCP tool is not available in this execution scope.')
@@ -755,7 +875,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
       }
       return result.value
     },
-  })
+  }
 
   /**
    * Cheap reachability check for streamable-http servers: a GET that gets any
@@ -793,18 +913,19 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
   }
 
   /** Entry + live status; probes reachability so a closed server is not shown as connected. */
-  async function decorateEntry(entry: McpServerEntry): Promise<McpServerEntry & { status: string; toolCount: number; error?: string }> {
+  async function decorateEntry(entry: McpServerEntry, presentation?: ConnectorPresentation) {
+    const view = serverView(entry, presentation)
     const base = statusOf(entry)
     if (base.status === 'connected') {
       const reachable = await probeReachable(entry)
-      if (!reachable) return { ...entry, ...base, status: 'offline' }
+      if (!reachable) return { ...view, ...base, status: 'offline' }
     } else if (base.status === 'connecting') {
       const reachable = await probeReachable(entry)
       if (!reachable) {
-        return { ...entry, ...base, status: 'error', error: '服务器不可达（可能已关闭）' }
+        return { ...view, ...base, status: 'error', error: '服务器不可达（可能已关闭）' }
       }
     }
-    return { ...entry, ...base }
+    return { ...view, ...base }
   }
 
   function findEntry(serverName: string): McpServerEntry | undefined {
@@ -867,6 +988,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
       throw new Error('body must be a JSON object')
     }
     const entry = body as McpServerEntry
+    if (entry.managedConnector !== undefined) throw new Error('Connector settings are owned by its plugin')
     if (typeof entry.serverName !== 'string' || !SERVER_NAME_PATTERN.test(entry.serverName)) {
       throw new Error('serverName must match [A-Za-z0-9_-]{1,32}')
     }
@@ -885,6 +1007,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
       throw new Error('body must be a JSON object')
     }
     const entry = body as McpServerEntry
+    if (entry.managedConnector !== undefined) throw new Error('Connector settings are owned by its plugin')
     if (entry.serverName !== undefined && entry.serverName !== serverName) {
       throw new Error(`serverName cannot be changed (stays "${serverName}")`)
     }
@@ -920,6 +1043,20 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
       req.on('error', reject)
     })
 
+  function sendExpiredAuthorization(res: import('node:http').ServerResponse): void {
+    res.end(`<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>OAuth Session Expired</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#18181b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#27272a;padding:32px;border-radius:12px;max-width:480px;text-align:center}</style></head>
+<body>
+  <div class="card">
+    <h2>⚠️ 会话已过期 (Session Expired)</h2>
+    <p style="color:#a1a1aa">请返回「连接器」重新授权。</p>
+  </div>
+  <script>setTimeout(() => window.close(), 3000);</script>
+</body>
+</html>`)
+  }
+
   const handler = async (req: import('node:http').IncomingMessage, res: import('node:http').ServerResponse): Promise<void> => {
     let diagnosticServer = 'unknown'
     try {
@@ -946,7 +1083,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
         if (errorParam || !code || !stateVal) {
           const errMsg = errorDescription || errorParam || 'Missing code or state parameter'
           const result = stateVal ? oauthResults.get(stateVal) : undefined
-          if (result && stateVal) {
+          if (result?.status === 'pending' && stateVal && pendingOAuthSessions.has(stateVal)) {
             diagnostic(result.serverName, 'oauth-callback-failed', diagnosticError(errMsg), 'ERROR')
             result.status = 'error'
             result.error = errMsg
@@ -973,18 +1110,10 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
         }
 
         const session = pendingOAuthSessions.get(stateVal)
-        if (!session || !available(session.serverName, { serverName: session.serverName, transport: 'streamable-http', url: session.url })) {
-          res.end(`<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>OAuth Session Expired</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#18181b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#27272a;padding:32px;border-radius:12px;max-width:480px;text-align:center}</style></head>
-<body>
-  <div class="card">
-    <h2>⚠️ 会话已过期 (Session Expired)</h2>
-    <p style="color:#a1a1aa">请返回 MCP 管理面板重新点击授权。</p>
-  </div>
-  <script>setTimeout(() => window.close(), 3000);</script>
-</body>
-</html>`)
+        const configured = session && state.servers.find(entry => entry.serverName === session.serverName)
+        if (!session || !available(session.serverName, { ...configured, serverName: session.serverName,
+          transport: configured?.transport ?? 'streamable-http', url: session.url })) {
+          sendExpiredAuthorization(res)
           return
         }
 
@@ -1002,7 +1131,17 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
             fetchFn: diagnosticFetch(session.serverName, 'oauth-exchange-http'),
           })
 
+          // The browser can return while the user cancels in settings. The
+          // result stays pending through exchange and must still be current
+          // before any credentials are written.
+          const result = oauthResults.get(stateVal)
+          if (result?.status !== 'pending' || !available(session.serverName, configured)) {
+            sendExpiredAuthorization(res)
+            return
+          }
           let entry = findEntry(session.serverName)
+          if (configured?.managedConnector && (entry?.managedConnector !== configured.managedConnector || entry.url !== session.url))
+            throw new Error('Connector configuration changed during authorization')
           if (!entry) {
             entry = {
               serverName: session.serverName,
@@ -1033,8 +1172,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
             },
           }
           saveState(path, state)
-          const result = oauthResults.get(stateVal)
-          if (result) result.status = 'authorized'
+          result.status = 'authorized'
           diagnostic(session.serverName, 'oauth-authorized')
 
           // Reconnect server immediately with the newly acquired token
@@ -1061,10 +1199,15 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
 </body>
 </html>`)
         } catch (err) {
+          const result = oauthResults.get(stateVal)
+          if (result?.status !== 'pending') {
+            sendExpiredAuthorization(res)
+            return
+          }
           const errMsg = err instanceof Error ? err.message : String(err)
           diagnostic(session.serverName, 'oauth-exchange-failed', diagnosticError(err), 'ERROR')
-          const result = oauthResults.get(stateVal)
-          if (result) { result.status = 'error'; result.error = errMsg }
+          result.status = 'error'
+          result.error = errMsg
           res.end(`<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>OAuth Exchange Failed</title><style>body{font-family:system-ui,-apple-system,sans-serif;background:#18181b;color:#f4f4f5;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}.card{background:#27272a;padding:32px;border-radius:12px;max-width:480px;text-align:center}</style></head>
@@ -1166,7 +1309,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
           }
           const entry = findEntry(body.serverName)
           const targetUrl = body.url || entry?.url
-          if (!available(body.serverName, { ...entry, serverName: body.serverName, transport: 'streamable-http', url: targetUrl })) {
+          if (!available(body.serverName, { ...entry, serverName: body.serverName, transport: entry?.transport ?? 'streamable-http', url: targetUrl })) {
             json(res, 404, { ok: false, error: 'server not found' })
             return
           }
@@ -1177,16 +1320,45 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
 
           const hostHeader = (req.headers.host || `127.0.0.1:${ctx.webServer.port}`).split(':')[0]
           const port = ctx.webServer.port
-          const authorization = await beginOAuth(body, `http://${hostHeader}:${port}/mcp-manager/api/oauth/callback`)
+          const callbackHost = entry?.managedConnector ? '127.0.0.1' : hostHeader
+          // Register before discovery so disabling this server can also cancel
+          // an authorization whose browser URL has not been prepared yet.
+          const webState = randomBytes(16).toString('hex')
+          oauthResults.set(webState, { serverName: body.serverName, status: 'pending', createdAt: Date.now(), web: true })
+          const authorization = await beginOAuth(entry?.managedConnector ? { serverName: entry.serverName } : body,
+            `http://${callbackHost}:${port}/mcp-manager/api/oauth/callback`, webState).catch(error => {
+            oauthResults.delete(webState)
+            throw error
+          })
           const authorizationUrl = new URL(authorization.authorizationUrl)
           let browserOpened = false
           if (body.openBrowser && integration?.openAuthorizationUrl && authorizationUrl.protocol === 'https:') {
             diagnostic(body.serverName, 'oauth-browser-opening')
-            await integration.openAuthorizationUrl(authorizationUrl)
-            browserOpened = true
+            try {
+              await integration.openAuthorizationUrl(authorizationUrl)
+              browserOpened = true
+            } catch {
+              diagnostic(body.serverName, 'oauth-browser-unavailable', '', 'WARN')
+            }
           }
           diagnostic(body.serverName, 'oauth-browser-ready', `browser=${browserOpened ? 'host' : 'popup'} callbackReceived=false`)
           json(res, 200, { ...authorization, browserOpened })
+          return
+        }
+
+        if (serverName === 'cancel') {
+          const body = JSON.parse(await readBody(req)) as { serverName?: unknown; state?: unknown } | null
+          if (typeof body?.serverName !== 'string' || typeof body.state !== 'string') {
+            json(res, 400, { ok: false, error: 'serverName and state are required' })
+            return
+          }
+          const result = oauthResults.get(body.state)
+          if (!result?.web || result.serverName !== body.serverName) {
+            json(res, 404, { ok: false, error: 'OAuth session not found.' })
+            return
+          }
+          cancelOAuthAttempt(body.state, result)
+          json(res, 200, { ok: true })
           return
         }
 
@@ -1209,6 +1381,137 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
         }
       }
 
+      if (action === 'agent-plugins') {
+        const plugins = integration?.agentPlugins
+        const canManage = plugins?.canManage(req) ?? false
+        if (req.method === 'GET' && serverName === undefined) {
+          json(res, 200, { ok: true, canManage, plugins: plugins?.list() ?? [] })
+          return
+        }
+        if (req.method !== 'POST' || !plugins || !canManage) {
+          json(res, 403, { ok: false, error: 'Local browser owner required to manage Agent Plugins' })
+          return
+        }
+        if (serverName === 'export' && sub === undefined) {
+          try {
+            const body = JSON.parse(await readBody(req)) as { id?: unknown; format?: unknown } | null
+            const format = body?.format === undefined ? 'standard' : body.format
+            if (typeof body?.id !== 'string' || typeof format !== 'string') {
+              json(res, 400, { ok: false, error: 'Invalid Agent Plugin export request' })
+              return
+            }
+            const archive = await plugins.export(body.id, format)
+            if (!archive) {
+              json(res, 404, { ok: false, error: 'Agent Plugin not found' })
+              return
+            }
+            res.setHeader('Content-Type', 'application/zip')
+            res.setHeader('Content-Disposition', 'attachment; filename="' + archive.fileName + '"')
+            res.setHeader('Content-Length', archive.bytes.length)
+            res.setHeader('Cache-Control', 'no-store')
+            res.end(archive.bytes)
+          } catch (error) {
+            if (error instanceof SyntaxError) json(res, 400, { ok: false, error: 'Invalid Agent Plugin export request' })
+            else if (error instanceof Error && error.name === 'AgentPluginExportError')
+              json(res, 400, { ok: false, error: error.message })
+            else json(res, 500, { ok: false, error: 'Could not export the Agent Plugin' })
+          }
+          return
+        }
+        if (sub === undefined && (serverName === 'preview' || serverName === 'commit' || serverName === 'discard')) {
+          const invalid = () => json(res, 400, { ok: false, error: 'Invalid Agent Plugin import request' })
+          try {
+            if (serverName === 'preview' && req.headers['content-type'] === 'application/zip') {
+              const encodedFileName = req.headers['x-agent-plugin-file']
+              if (typeof encodedFileName !== 'string') {
+                invalid()
+                return
+              }
+              const fileName = decodeURIComponent(encodedFileName)
+              if (!fileName || !fileName.toLowerCase().endsWith('.zip') || /[\\/\x00-\x1f]/.test(fileName)) {
+                invalid()
+                return
+              }
+              const zipBytes = await readAgentPluginZip(req)
+              const preview = await plugins.preview({ fileName, zipBytes })
+              json(res, 200, { ok: true, preview })
+              return
+            }
+
+            const body = JSON.parse(await readBody(req)) as Record<string, unknown> | null
+            if (!body || typeof body !== 'object' || Array.isArray(body)) {
+              invalid()
+              return
+            }
+            if (serverName === 'preview') {
+              const { directory, source, candidate } = body
+              if (typeof directory === 'string' && source === undefined && candidate === undefined) {
+                const preview = await plugins.preview({ directory })
+                json(res, 200, { ok: true, preview })
+              } else if (directory === undefined && isAgentPluginSource(source) && candidate === undefined) {
+                const candidates = await plugins.discover(source)
+                json(res, 200, { ok: true, candidates })
+              } else if (directory === undefined && isAgentPluginSource(source) && typeof candidate === 'string') {
+                const preview = await plugins.preview({ source, candidate })
+                json(res, 200, { ok: true, preview })
+              } else {
+                invalid()
+              }
+              return
+            }
+
+            const { id, serverIds, skillNames, allowStdio } = body
+            if (typeof id !== 'string' || !id) {
+              invalid()
+              return
+            }
+            if (serverName === 'commit') {
+              if (!isStringArray(serverIds) || !isStringArray(skillNames) || typeof allowStdio !== 'boolean') {
+                invalid()
+                return
+              }
+              await plugins.commit({ id, serverIds, skillNames, allowStdio })
+              await syncContributions()
+            } else {
+              await plugins.discard(id)
+            }
+            json(res, 200, { ok: true })
+          } catch (error) {
+            if (error instanceof AgentPluginUploadTooLarge) {
+              json(res, 413, { ok: false, error: 'ZIP archives may be up to 16 MiB.' })
+            } else if (error instanceof SyntaxError || error instanceof URIError) {
+              invalid()
+            } else if (error instanceof Error && error.name === 'AgentPluginImportError') {
+              json(res, 400, { ok: false, error: error.message })
+            } else {
+              json(res, 500, { ok: false, error: 'Could not import the Agent Plugin' })
+            }
+          }
+          return
+        }
+        try {
+          const body = JSON.parse(await readBody(req)) as { id?: unknown; enabled?: unknown } | null
+          if (serverName === 'toggle' && typeof body?.id === 'string' && typeof body.enabled === 'boolean')
+            await plugins.setEnabled(body.id, body.enabled)
+          else if (serverName === 'remove' && typeof body?.id === 'string') await plugins.remove(body.id, syncContributions)
+          else throw Error('Invalid Agent Plugin request')
+          await syncContributions()
+          json(res, 200, { ok: true })
+        } catch (error) {
+          json(res, 400, { ok: false, error: error instanceof Error ? error.message : String(error) })
+        }
+        return
+      }
+
+      if (req.method === 'GET' && action === 'connectors' && serverName === undefined) {
+        const servers = await Promise.all(visibleEntries().flatMap(entry => {
+          const presentation = integration?.connectorPresentation?.(entry)
+          return presentation ? [decorateEntry(entry, presentation)] : []
+        }))
+        json(res, 200, { ok: true, servers })
+        return
+      }
+
       if (req.method === 'GET' && action === 'servers' && serverName === undefined) {
         const entries = visibleEntries()
         const servers = await Promise.all(entries.map(entry => decorateEntry(entry)))
@@ -1225,7 +1528,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
         void connect(entry).catch(err => {
           ctx.logger.error(`mcp-manager: connect "${entry.serverName}" failed: ${String(err)}`)
         })
-        json(res, 201, { ok: true, server: { ...entry, ...statusOf(entry) } })
+        json(res, 201, { ok: true, server: { ...serverView(entry), ...statusOf(entry) } })
         return
       }
 
@@ -1252,6 +1555,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
           return
         }
         if (req.method === 'DELETE') {
+          if (findEntry(serverName)?.managedConnector) throw new Error('Disable the connector on the Connectors page or uninstall its plugin')
           await disconnect(serverName)
           const before = state.servers.length
           state.servers = state.servers.filter(entry => entry.serverName !== serverName)
@@ -1266,6 +1570,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
             json(res, 404, { ok: false, error: `server "${serverName}" not found` })
             return
           }
+          if (entry.managedConnector) throw new Error('Connector settings are owned by its plugin')
           const body = JSON.parse(await readBody(req)) as unknown
           const updated = validateUpdate(serverName, body)
           if (updated.oauth) updated.oauth = reconcileOAuthClient(entry.oauth, updated.oauth)
@@ -1300,7 +1605,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
               ctx.logger.error(`mcp-manager: update "${serverName}" failed: ${message}`)
             }
           })
-          json(res, 200, { ok: true, server: { ...entry, ...statusOf(entry) } })
+          json(res, 200, { ok: true, server: { ...serverView(entry), ...statusOf(entry) } })
           return
         }
 
@@ -1314,6 +1619,11 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
           const enabled = body?.enabled === true
           entry.enabled = enabled
           saveState(path, state)
+          if (!enabled) {
+            for (const [stateVal, result] of oauthResults) {
+              if (result.web && result.serverName === serverName) cancelOAuthAttempt(stateVal, result)
+            }
+          }
           if (isEnabled(entry)) {
             void connect(entry).catch(err => {
               ctx.logger.error(`mcp-manager: enable "${serverName}" connect failed: ${String(err)}`)
@@ -1321,7 +1631,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
           } else {
             await disconnect(serverName)
           }
-          json(res, 200, { ok: true, server: { ...entry, ...statusOf(entry) } })
+          json(res, 200, { ok: true, server: { ...serverView(entry), ...statusOf(entry) } })
           return
         }
 
@@ -1337,7 +1647,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
             ctx.logger.error(`mcp-manager: reconnect "${serverName}" failed: ${String(err)}`)
           })
           diagnostic(serverName, 'reconnect-accepted')
-          json(res, 200, { ok: true, server: { ...entry, ...statusOf(entry) } })
+          json(res, 200, { ok: true, server: { ...serverView(entry), ...statusOf(entry) } })
           return
         }
 
@@ -1362,9 +1672,28 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
 
   // ── lifecycle ───────────────────────────────────────────────────────────────
 
+  let syncingContributions: Promise<void> = Promise.resolve()
+  function syncContributions(): Promise<void> {
+    const run = syncingContributions.then(async () => {
+      for (const [stateVal, result] of oauthResults) {
+        if (!available(result.serverName)) cancelOAuthAttempt(stateVal, result)
+      }
+      await reloadFromDisk()
+      for (const entry of state.servers) {
+        if (!available(entry.serverName, entry) || !isEnabled(entry)) await disconnect(entry.serverName)
+        else if (!fibers.has(entry.serverName)) {
+          void connect(entry).catch(err => ctx.logger.warn('mcp-manager: contribution connect failed: %s', String(err)))
+        }
+      }
+    })
+    syncingContributions = run.catch(() => {})
+    return run
+  }
+
   // Routes are registered through an effect so unload removes them; the
   // register() disposer doubles as the effect disposer.
   ctx.effect(() => ctx.webServer.register({ kind: 'prefix', path: '/mcp-manager', handler }), 'mcp-manager.routes')
+  ctx.provide('mcpManager', service)
 
   // Connections are owned by this fiber: unloading the manager disposes every
   // mounted mcp-client fiber, which disconnects and unregisters all its tools.
@@ -1372,12 +1701,7 @@ function applyManager(ctx: Context, integration?: McpManagerIntegration): void {
   ctx.effect(() => {
     let reloadTimer: ReturnType<typeof setTimeout> | undefined
     const unsubscribe = integration?.subscribe?.(() => {
-      void reloadFromDisk().then(async () => {
-        for (const entry of state.servers) {
-          if (!available(entry.serverName, entry) || !isEnabled(entry)) await disconnect(entry.serverName)
-          else if (!fibers.has(entry.serverName)) void connect(entry).catch(err => ctx.logger.warn('mcp-manager: contribution connect failed: %s', String(err)))
-        }
-      }).catch(err => ctx.logger.warn('mcp-manager: contribution refresh failed: %s', String(err)))
+      void syncContributions().catch(err => ctx.logger.warn('mcp-manager: contribution refresh failed: %s', String(err)))
     })
     const oauthCleanup = setInterval(() => {
       for (const [stateId, result] of oauthResults) {

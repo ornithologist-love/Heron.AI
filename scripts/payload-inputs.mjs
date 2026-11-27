@@ -8,7 +8,7 @@ import { readMcpBuildInputs } from './mcp-build-inputs.mjs'
 
 export function payloadInputs(root) {
   const files = sourceInputs(root, ['LICENSE', 'THIRD-PARTY-NOTICES.md', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.pnpmfile.cjs', '.npmrc', 'node-runtime.json',
-    'config', 'scripts', 'packages/common'])
+    'config', 'scripts', 'packages/common', 'packages/agent-plugins'])
   const dsh = path.join(root, 'packages/dsh')
   const repositories = new Map([[dsh, ['package.json', 'pnpm-lock.yaml', 'tsconfig.json', 'apps/web']]])
   const forks = JSON.parse(fs.readFileSync(path.join(root, 'scripts/dsh-build/forks.json'), 'utf8'))
@@ -49,6 +49,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   files.push(...bundle.manifestFiles, ...mcp.files)
   for (const plugin of plugins) {
     files.push(...bundledInputs(plugin))
+  }
+  for (const plugin of bundle.agentDirectories) {
+    files.push(...bundledInputs(plugin, plugin, {}))
   }
   const hash = createHash('sha256').update(process.version + ':' + process.platform + ':' + process.arch)
   for (const file of [...new Set(files)].sort()) hash.update(file).update('\0').update(fs.readFileSync(file)).update('\0')

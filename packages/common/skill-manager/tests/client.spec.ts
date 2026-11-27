@@ -6,8 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 
 // The real components import ui-primitives icons (CSS Modules); the apply
-// contract — a settings-section page whose body hosts the editor window — does
-// not need them.
+// contract only needs the slot registry.
 vi.mock('../src/client/skill-manager-panel.tsx', () => ({
   SkillManagerPanel: () => null,
 }))
@@ -18,27 +17,36 @@ vi.mock('../src/client/skill-manager-editor.tsx', () => ({
 import { apply, inject } from '../src/client/index.ts'
 import { groupByTier, groupByWorkspace, groupByPreset, groupByProvider } from '../src/client/store.ts'
 import type { SkillManagerEntry } from '../src/client/store.ts'
+import type { SkillManagerPanelProps } from '../src/client/skill-manager-panel.tsx'
 
-/** Minimal slot registry stub: records registrations against declared slots. */
+/** Slot registry stub with deferred injection for optional slots. */
 function slotStub() {
-  const registered: { name: string; id?: string; order?: number }[] = []
+  type Registration = { name: string; inject: () => SkillManagerPanelProps }
+  const registered: Registration[] = []
   const declared = new Set(['settings.section'])
+  const pending = new Map<string, () => unknown>()
   return {
     registered,
     inject(name: string, fn: () => unknown) {
-      if (!declared.has(name)) throw new Error(`slot "${name}" is not declared`)
-      fn()
+      if (declared.has(name)) fn()
+      else pending.set(name, fn)
+      return () => { pending.delete(name) }
+    },
+    register(options: Registration, _component: unknown) {
+      registered.push(options)
       return () => {}
     },
-    register(options: { name: string; id?: string; order?: number }, _component: unknown) {
-      registered.push({ name: options.name, id: options.id, order: options.order })
-      return () => {}
+    declare(name: string) {
+      declared.add(name)
+      pending.get(name)?.()
+      pending.delete(name)
     },
   }
 }
 
 describe('dsh-skill-manager client half', () => {
-  it('registers the Skill Manager settings page', async () => {
+  // Anchor: Docs/architecture/extensions.md#连接器和技能
+  it('registers Skills only when the Connectors slot becomes available', async () => {
     const ctx = new Context()
     const slots = slotStub()
     ctx.provide('slots', slots as never)
@@ -48,38 +56,17 @@ describe('dsh-skill-manager client half', () => {
       rpc: { call: vi.fn() },
       api: {},
     } as never)
-    ctx.provide('sessions', { list: { getSnapshot: () => ({ current: undefined }) } } as never)
+    ctx.provide('uiSession', {} as never)
     await ctx.plugin(apply)
     expect(inject).toContain('slots')
-    expect(slots.registered).toHaveLength(1)
-    const page = slots.registered[0]
-    expect(page.name).toBe('settings.section')
-    expect(page.id).toBe('skill-manager')
-    expect(page.order).toBe(15)
+    expect(slots.registered).toEqual([])
+    slots.declare('connectors.skills')
+    expect(slots.registered.map(slot => slot.name)).toEqual(['connectors.skills'])
+    expect(slots.registered[0].inject()).toMatchObject({
+      controller: expect.any(Object),
+      usePanel: expect.any(Function),
+    })
     await ctx.fiber.dispose()
-  })
-
-  it('injects into declared slots only (undeclared slots fail loud)', async () => {
-    const ctx = new Context()
-    const slots = {
-      inject(name: string, fn: () => unknown) {
-        if (name !== 'settings.section' && name !== 'shell.overlay') {
-          throw new Error(`slot "${name}" is not declared`)
-        }
-        fn()
-        return () => {}
-      },
-      register: vi.fn(() => () => {}),
-    }
-    ctx.provide('slots', slots as never)
-    ctx.provide('locale', { register: vi.fn(), bind: vi.fn(() => (key: string) => key) } as never)
-    ctx.provide('connection', {
-      isLoopback: true,
-      rpc: { call: vi.fn() },
-      api: {},
-    } as never)
-    ctx.provide('sessions', { list: { getSnapshot: () => ({ current: undefined }) } } as never)
-    await expect(ctx.plugin(apply)).resolves.toBeDefined()
   })
 })
 

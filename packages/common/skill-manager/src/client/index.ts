@@ -1,8 +1,5 @@
 /**
- * Skill Manager plugin, browser half: registers the Skill Manager page in the
- * settings panel (`settings.section`) — a browse view over the catalog served
- * by the host's `skillManager.list` endpoint, grouped into system / user /
- * project tiers with system rows read-only.
+ * Browser entry for the Skill Manager tab in Connectors.
  */
 
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -19,11 +16,6 @@ function bindSnapshotSelector<T>(w: HostObservable<T>): SnapshotSelectorHook<T> 
     return sel(useSyncExternalStore(subscribe, getSnapshot))
   }
 }
-// Type-only: pulls the settings SlotMap merge into every program that sees
-// this contract, so PropsRuntime<'settings.section'> resolves.
-import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
-// Type-only: pulls the layout SlotMap merge ('shell.overlay') for the editor window.
-import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 // Type-only: pulls the locale plugin's Context merge (ctx.locale).
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import { SkillManagerPanel, type SkillManagerInjected } from './skill-manager-panel.tsx'
@@ -35,8 +27,12 @@ export type { SkillManagerEntry, SkillManagerState } from './store.ts'
 export type { SkillManagerKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
+  interface SlotMap {
+    'connectors.skills': { kind: 'single'; scope: 'root' }
+  }
+
   interface LocaleNamespaceMap {
-    /** The Skill Manager settings page copy. */
+    /** The Skill Manager tab copy. */
     'skill-manager': SkillManagerKey
   }
 }
@@ -48,7 +44,7 @@ const NS = 'skill-manager'
 export const inject = ['slots', 'locale', 'connection', 'uiSession']
 
 /**
- * Register the Skill Manager settings page over one shared store.
+ * Register the Skill Manager tab when Connectors is available.
  * @param ctx - client root context.
  */
 export function apply(ctx: ClientContext): void {
@@ -78,11 +74,8 @@ export function apply(ctx: ClientContext): void {
     refreshSilent: () => { void controller.refresh(currentSessionId(), true) },
   })
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'skill-manager',
-    order: 15,
-    label: () => t('nav'),
+  ctx.slots.inject('connectors.skills', () => ctx.slots.register({
+    name: 'connectors.skills',
     locale: NS,
     inject: injectProps,
   }, SkillManagerPanel))

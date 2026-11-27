@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "notion-connector",
+  "version": "0.2.0",
+  "description": "Find, create, and edit pages and databases with the official Notion MCP server.",
+  "extensions": {
+    "io.heron-ai": {
+      "title": "Notion",
+      "description": { "zh": "查找、创建和编辑页面与数据库", "en": "Find, create, and edit pages and databases" },
+      "icon": "./assets/logo.png",
+      "servers": {
+        "notion-connector": {
+          "existingId": "notion-connector",
+          "displayName": "Notion Connector",
+          "authType": "oauth",
+          "scopes": ["default"]
+        }
+      }
+    }
+  }
+}

@@ -26,28 +26,44 @@ export async function authorizeOAuth(
   body: { serverName: string; url?: string; clientId?: string; scopes?: string[] },
   signal?: AbortSignal,
   popup: Window | null = window.open('about:blank', `mcp_oauth_${body.serverName}`, 'width=650,height=760'),
+  showAuthorizationLink?: (url: string) => void,
 ): Promise<void> {
-  const closePopup = () => popup?.close()
-  signal?.addEventListener('abort', closePopup, { once: true })
+  let authorizationState: string | undefined
+  let cancellation: Promise<unknown> | undefined
+  const cancel = () => {
+    popup?.close()
+    if (authorizationState && !cancellation) {
+      cancellation = request(`${api}/oauth/cancel`, {
+        method: 'POST', signal: AbortSignal.timeout(5000),
+        body: JSON.stringify({ serverName: body.serverName, state: authorizationState }),
+      }).catch(() => { report(request, api, body.serverName, 'failed', 'request-failed') })
+    }
+    return cancellation
+  }
+  signal?.addEventListener('abort', cancel, { once: true })
   try {
     signal?.throwIfAborted()
+    // The response supplies the state to cancel, even if the browser is still opening.
     const result = await request<{ authorizationUrl: string; state: string; browserOpened: boolean }>(`${api}/oauth/start`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal,
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...body, openBrowser: true }),
     })
+    authorizationState = result.state
+    signal?.throwIfAborted()
     report(request, api, body.serverName, 'oauth-start-received', result.browserOpened ? 'host-browser' : 'popup-browser')
+    const authorization = new URL(result.authorizationUrl)
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(authorization.hostname)
+    if (authorization.protocol !== 'https:' && !loopback) throw new Error(t('oauthHttpsRequired'))
+    showAuthorizationLink?.(authorization.href)
     if (result.browserOpened) {
       popup?.close()
       popup = null
     } else {
-      const authorization = new URL(result.authorizationUrl)
-      const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(authorization.hostname)
-      if (authorization.protocol !== 'https:' && !loopback) throw new Error(t('oauthHttpsRequired'))
       if (popup && !popup.closed) popup.location.replace(authorization.href)
       else {
         // A WebView may hand new windows to the system browser and return null.
         popup = window.open(authorization.href, `mcp_oauth_${body.serverName}`, 'width=650,height=760')
-        if (!popup && !loopback) throw new Error(t('oauthPopupBlocked'))
+        if (!popup && !loopback && !showAuthorizationLink) throw new Error(t('oauthPopupBlocked'))
       }
     }
     report(request, api, body.serverName, 'oauth-poll-start')
@@ -72,12 +88,13 @@ export async function authorizeOAuth(
         throw new Error(t('oauthStillWaiting'))
       }
       if (status.status === 'error') throw new Error(status.error || t('error'))
-      if (popup?.closed) throw new Error(t('oauthPopupClosed'))
+      if (popup?.closed && !showAuthorizationLink) throw new Error(t('oauthPopupClosed'))
       await new Promise(resolve => setTimeout(resolve, 1000))
     }
     throw new Error(t('oauthStillWaiting'))
   } finally {
-    signal?.removeEventListener('abort', closePopup)
+    signal?.removeEventListener('abort', cancel)
+    if (signal?.aborted) await cancel()
     popup?.close()
   }
 }
@@ -86,6 +103,7 @@ export async function reconnectWithOAuth(
   server: McpServerView, request: Request,
   api: string, reconnect: (name: string) => Promise<void>, t: (key: LocaleKey) => string,
   signal?: AbortSignal,
+  showAuthorizationLink?: (url: string) => void,
 ): Promise<void> {
   report(request, api, server.serverName, 'click')
   let popup: Window | null = null
@@ -117,9 +135,9 @@ export async function reconnectWithOAuth(
       throw new Error(t('timeoutMsg').replace('{n}', '35'))
     // Network/transport failures must not trigger another authorization round.
     if (!/OAuth|\b401\b|unauthorized|invalid[_ ]token|invalid_grant/i.test(current.error ?? ''))
-      throw new Error(current.error || t(current.status === 'disabled' ? 'disabled' : 'error'))
+      throw new Error(current.error || t(current.status === 'disabled' ? 'disconnected' : 'error'))
     report(request, api, server.serverName, 'oauth-required')
-    await authorizeOAuth(request, api, t, { serverName: server.serverName }, signal, popup)
+    await authorizeOAuth(request, api, t, { serverName: server.serverName }, signal, popup, showAuthorizationLink)
     report(request, api, server.serverName, 'connected')
   } catch (error) {
     report(request, api, server.serverName, signal?.aborted ? 'cancelled' : 'failed', failureReason(error, t, signal))

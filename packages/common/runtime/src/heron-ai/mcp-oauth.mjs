@@ -43,12 +43,11 @@ function openInNativeHost(url) {
   })
 }
 
-// Native hosts can recover a failed system-browser launch in their own WebView.
-// Other hosts retain the system opener without depending on page popup support.
-export async function openAuthorizationUrl(url) {
+// Flows that require an external user agent use the Windows shell directly.
+export async function openAuthorizationUrl(url, { systemOnly = false } = {}) {
   if (process.platform !== 'win32' || url.protocol !== 'https:')
     throw new Error('无法打开授权页面：授权地址必须使用 HTTPS。')
-  if (process.env.DSH_EXTERNAL_BROWSER_BRIDGE === 'stdio-v1') {
+  if (!systemOnly && process.env.DSH_EXTERNAL_BROWSER_BRIDGE === 'stdio-v1') {
     process.stderr.write('[MCP-BROWSER] phase=host-browser-requested\n')
     const mode = await openInNativeHost(url)
     process.stderr.write(`[MCP-BROWSER] phase=host-browser-opened mode=${mode}\n`)

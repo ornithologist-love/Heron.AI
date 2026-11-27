@@ -11,7 +11,7 @@ import { writeDevelopmentContext } from './plugin-dev-context.mjs'
 import { bundleNode } from './node-runtime.mjs'
 import { buildReceipt } from './build-receipt.mjs'
 import { payloadInputs } from './payload-inputs.mjs'
-import { pluginBundleInputs, bundleFileIncluded, selectedFile, selectedMcpServers, dropExcludedLinks } from './plugin-bundles.mjs'
+import { pluginBundleInputs, bundleFileIncluded, readAgentBundle, selectedAgentManifest, selectedFile, selectedMcpServers, dropExcludedLinks } from './plugin-bundles.mjs'
 import { readMcpBuildInputs } from './mcp-build-inputs.mjs'
 import { visibleSourceFiles } from './source-inventory.mjs'
 import { assertPublicPayload } from './public-payload.mjs'
@@ -22,7 +22,7 @@ const source = path.join(product, 'src')
 const args = process.argv.slice(2)
 const options = new Map(), pluginDirectories = []
 for (let i = 0; i < args.length; i += 2) {
-  if (!['--output', '--bundle-plugin', '--bundle-manifest'].includes(args[i]) || !args[i + 1]) throw Error('Usage: build.mjs [--output <app>] [--bundle-manifest <composition.json> | --bundle-plugin <DSH plugin directory>...]')
+  if (!['--output', '--bundle-plugin', '--bundle-manifest'].includes(args[i]) || !args[i + 1]) throw Error('Usage: build.mjs [--output <app>] [--bundle-manifest <composition.json> | --bundle-plugin <plugin directory>...]')
   if (args[i] === '--bundle-plugin') pluginDirectories.push(args[i + 1])
   else {
     if (options.has(args[i])) throw Error('Duplicate build option: ' + args[i])
@@ -31,6 +31,7 @@ for (let i = 0; i < args.length; i += 2) {
 }
 const bundle = pluginBundleInputs(options.get('--bundle-manifest'), pluginDirectories)
 const bundledPlugins = bundle.directories
+const builtInAgentPlugins = ['linear-connector', 'notion-connector'].map(name => path.join(root, 'packages/agent-plugins', name))
 const mcpBuildInputs = readMcpBuildInputs(bundledPlugins, bundle.mcpSecretsFile, bundle.selections)
 const output = path.resolve(options.get('--output') ?? path.join(root, 'dist/app'))
 const host = path.join(output, 'AiHost')
@@ -103,7 +104,8 @@ async function mirror(sourceDirectory, targetDirectory, { sourceMaps = false } =
 
 // Explicit bundled plugins can inject private, environment-dependent build inputs.
 // Their release pipeline verifies the versioned package before reusing it.
-const component = bundledPlugins.length ? null : buildReceipt(root, 'AI payload:' + output, () => payloadInputs(root), [output], 'payload-v1')
+const component = bundledPlugins.length || bundle.agentDirectories.length
+  ? null : buildReceipt(root, 'AI payload:' + output, () => payloadInputs(root), [output], 'payload-v1')
 if (component?.reusable) process.exit(0)
 await fs.mkdir(cache, { recursive: true })
 for (const name of ['dsh', 'community/dsh-better-sidebar']) {
@@ -143,13 +145,13 @@ await fs.mkdir(host, { recursive: true })
 const timings = []
 async function stage(name, run) {
   const start = Date.now()
-  try { await run() } finally { timings.push([name, Date.now() - start]) }
+  try { return await run() } finally { timings.push([name, Date.now() - start]) }
 }
 await stage('assemble-dependencies', () => assembleDependencies(root, product, host))
 // DSH plugins kept outside this checkout ship preinstalled: copied into the pruned payload
 // (pruning keeps only the product graph; the next assembly removes them) and listed for one-time activation.
 const BUNDLED_PLUGINS_FILE = path.join('heron-ai', 'content', 'bundled-plugins.json')
-async function bundlePlugins(directories) {
+async function bundlePlugins(directories, agentRoots) {
   const names = []
   for (const directory of directories) {
     const manifest = JSON.parse(await fs.readFile(path.join(directory, 'package.json'), 'utf8'))
@@ -168,6 +170,19 @@ async function bundlePlugins(directories) {
       return bundleFileIncluded(manifest, relative, stat.isDirectory()) && selectedFile(manifest, selection, relative)
     } })
     dropExcludedLinks(target, selection)
+    // Keep the installed script's asset path during a client-only upgrade.
+    // Use the assembled Agent Plugin so edition filters also apply to the copy.
+    for (const [name, paths] of Object.entries(manifest.heronAi?.build?.agentPluginAssets ?? {})) {
+      const agentRoot = agentRoots.get(name)
+      if (!agentRoot) continue
+      for (const relative of paths) {
+        const from = path.resolve(agentRoot, relative)
+        const to = path.resolve(target, relative)
+        if (path.isAbsolute(relative) || from === agentRoot || !within(agentRoot, from) || !within(target, to))
+          throw Error('Agent Plugin asset must stay inside its bundle: ' + relative)
+        if (existsSync(from)) await fs.cp(from, to, { recursive: true, force: false, errorOnExist: true })
+      }
+    }
     // Optional content belongs to its package. Only explicitly bundled copies
     // receive assembly credentials; neither the source nor public defaults do.
     const mcpContent = manifest.heronAi?.content?.['mcp-config.json']
@@ -190,6 +205,29 @@ async function bundlePlugins(directories) {
   }
   await fs.mkdir(path.join(host, path.dirname(BUNDLED_PLUGINS_FILE)), { recursive: true })
   await fs.writeFile(path.join(host, BUNDLED_PLUGINS_FILE), JSON.stringify(names) + '\n')
+}
+async function bundleAgentPlugins(directories) {
+  const roots = new Map()
+  for (const directory of directories) {
+    const { manifest, mcp } = readAgentBundle(directory)
+    if (roots.has(manifest.name)) throw Error('Duplicate bundled Agent Plugin: ' + manifest.name)
+    const target = path.join(host, 'heron-ai', 'content', 'agent-plugins', manifest.name)
+    roots.set(manifest.name, target)
+    const selection = bundle.selections.get(directory)
+    await fs.cp(directory, target, { recursive: true, filter: file => {
+      const stat = lstatSync(file)
+      if (stat.isSymbolicLink()) throw Error('Bundled Agent Plugin contains a link: ' + file)
+      const relative = path.relative(directory, file)
+      return bundleFileIncluded({}, relative, stat.isDirectory()) && selectedFile(manifest, selection, relative)
+    } })
+    dropExcludedLinks(target, selection)
+    if (selection?.mcpServers) {
+      await fs.writeFile(path.join(target, 'plugin.json'), JSON.stringify(selectedAgentManifest(manifest, selection), null, 2) + '\n')
+      if (mcp) await fs.writeFile(path.join(target, 'mcp.json'), JSON.stringify(selectedMcpServers(mcp, selection), null, 2) + '\n')
+    }
+    console.log('[bundle-agent-plugins] ' + manifest.name + ' <- ' + directory)
+  }
+  return roots
 }
 const runtimeFiles = await sourceFiles(source)
 const keep = new Set(runtimeFiles.map(file => path.relative(source, file)))
@@ -241,9 +279,10 @@ await stage('mirror-ui', async () => {
 await stage('mirror-assets', () => mirror(path.join(product, 'assets'), path.join(host, 'heron-ai/assets')))
 await fs.copyFile(path.join(product, 'assets/runtime-logo.png'), path.join(host, 'heron-ai/content/runtime-logo.png'))
 await stage('prune-distribution', () => node(path.join(root, 'scripts/prune-distribution.mjs'), [host]))
-await stage('bundle-plugins', () => bundlePlugins(bundledPlugins))
+const agentRoots = await stage('bundle-agent-plugins', () => bundleAgentPlugins(new Set([...builtInAgentPlugins, ...bundle.agentDirectories])))
+await stage('bundle-plugins', () => bundlePlugins(bundledPlugins, agentRoots))
 await stage('plugin-development-context', () => writeDevelopmentContext(host, path.join(web, 'src')))
-if (!bundledPlugins.length) await stage('public-payload', () => assertPublicPayload(host))
+if (!bundledPlugins.length && !bundle.agentDirectories.length) await stage('public-payload', () => assertPublicPayload(host))
 await stage('verify-payload', () => node(path.join(root, 'scripts/verify-payload.mjs'), [host, '--source', source]))
 await stage('bundle-node', () => bundleNode(root, output))
 component?.commit()

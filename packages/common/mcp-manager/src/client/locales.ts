@@ -14,74 +14,87 @@ export type LocaleKey =
   | 'oauthStillWaiting'
 
   | 'nav'
-  | 'title'
-  | 'intro'
+  | 'skillsTab'
+  | 'tabsLabel'
+  | 'backToConnectors'
+  | 'configure'
+  | 'connectorConnect'
+  | 'connectorConnected'
+  | 'connectorWaiting'
+  | 'connectorToggle'
   | 'loading'
-  | 'empty'
-  | 'connected'
+  | 'loadFailed'
+  | 'groupStatus'
   | 'connecting'
   | 'error'
-  | 'offline'
-  | 'disabled'
   | 'disconnected'
-  | 'unknown'
-  | 'offlineHint'
   | 'reconnect'
-  | 'reconnecting'
-  | 'edit'
-  | 'enabledLabel'
-  | 'disabledLabel'
-  | 'addServer'
   | 'refresh'
-  | 'addTitle'
-  | 'editTitle'
-  | 'backToList'
-  | 'deleteServer'
-  | 'deleteTitle'
-  | 'confirmDelete'
-  | 'deleting'
-  | 'deleteHint'
-  | 'fieldServerName'
-  | 'fieldTransport'
-  | 'fieldUrl'
-  | 'fieldCommand'
-  | 'fieldArgs'
-  | 'fieldArgsPlaceholder'
-  | 'fieldHeaders'
-  | 'fieldTimeout'
-  | 'timeoutHint'
   | 'cancel'
-  | 'save'
-  | 'addAndConnect'
-  | 'savingBusy'
-  | 'addingBusy'
-  | 'invalidHeaders'
-  | 'nameRequired'
-  | 'urlRequired'
+  | 'disable'
+  | 'retry'
   | 'timeoutMsg'
-  | 'addFailed'
-  | 'updateFailed'
   | 'toggleFailed'
-  | 'serverNameLocked'
-  | 'advancedSettings'
-  | 'tokenLabel'
-  | 'tokenHint'
-  | 'authType'
-  | 'authTypeNone'
-  | 'authTypeOAuth'
-  | 'oauthStatus'
-  | 'oauthAuthorized'
-  | 'oauthNotAuthorized'
-  | 'oauthAuthorizeBtn'
-  | 'oauthAuthorizing'
   | 'oauthRevokeBtn'
-  | 'oauthClientId'
-  | 'oauthClientIdHint'
-  | 'oauthScopes'
-  | 'oauthScopesHint'
-  | 'oauthExpiresAt'
-  | 'oauthSuccessMsg'
-  | 'oauthFailedMsg'
+  | 'revokeFailed'
+  | 'oauthCopyLink'
+  | 'oauthLinkCopied'
+  | 'subServices'
+  | 'connectorTools'
+  | 'connectorToolsCount'
+  | 'searchTools'
+  | 'noTools'
+  | 'maintenance'
+  | 'agentPluginImport'
+  | 'agentPluginDirectory'
+  | 'agentPluginBrowse'
+  | 'agentPluginZip'
+  | 'agentPluginZipInvalid'
+  | 'agentPluginDiscover'
+  | 'agentPluginDiscoveryEmpty'
+  | 'agentPluginPreview'
+  | 'agentPluginPreviewLoading'
+  | 'agentPluginPreviewFailed'
+  | 'agentPluginImportBack'
+  | 'agentPluginImportMcp'
+  | 'agentPluginStdioCommands'
+  | 'agentPluginStdioConfirm'
+  | 'agentPluginBrowseFailed'
+  | 'agentPluginImportConfirm'
+  | 'agentPluginImporting'
+  | 'agentPluginImportFailed'
+  | 'agentPluginSkills'
+  | 'agentPluginSkillSource'
+  | 'agentPluginManage'
+  | 'agentPluginEnabled'
+  | 'agentPluginDisabled'
+  | 'agentPluginToggle'
+  | 'agentPluginRemove'
+  | 'agentPluginExport'
+  | 'agentPluginExportFormat'
+  | 'agentPluginExportDownload'
+  | 'agentPluginExporting'
+  | 'agentPluginExportFailed'
+  | 'agentPluginChangeFailed'
+  | 'customSectionTitle'
+  | 'customEmpty'
+  | 'customAdd'
+  | 'customDelete'
+  | 'customDeleteFailed'
+  | 'customAddFailed'
+  | 'customServerName'
+  | 'customTransport'
+  | 'customUrl'
+  | 'customCommand'
+  | 'customArgs'
+  | 'customCwd'
+  | 'customAuthType'
+  | 'customAuthNone'
+  | 'customAuthOAuth'
+  | 'customSave'
+  | 'customNameInvalid'
+  | 'customUrlInvalid'
+  | 'customCommandRequired'
 
 /** Placeholders in template strings: `{n}`, `{name}` are replaced at render time. */
 export const zh: Record<LocaleKey, string> = {
@@ -90,75 +103,88 @@ export const zh: Record<LocaleKey, string> = {
   oauthPopupClosed: '授权窗口已关闭，请重新发起授权。',
   oauthStillWaiting: '等待授权超时，完成登录后请刷新状态。',
 
-  nav: 'MCP',
-  title: 'MCP 服务器',
-  intro: '配置并管理 MCP 工具服务器，连接后可供所有会话使用。',
+  nav: '连接器',
+  skillsTab: '技能',
+  tabsLabel: '连接器页面选项卡',
+  backToConnectors: '返回连接器',
+  configure: '配置',
+  connectorConnect: '连接',
+  connectorConnected: '已连接',
+  connectorWaiting: '等待授权',
+  connectorToggle: '启用 {name}',
   loading: '加载中…',
-  empty: '暂无 MCP 服务器',
-  connected: '已连接 · {n} 个工具',
+  loadFailed: '无法加载连接器，请刷新。',
+  groupStatus: '已连接 {n}/{total} 项',
   connecting: '连接中…',
-  error: '连接失败',
-  offline: '离线',
-  disabled: '已停用',
+  error: '连接异常',
   disconnected: '未连接',
-  unknown: '未知',
-  offlineHint: '服务无响应，恢复后将自动重连。',
-  reconnect: '重连',
-  reconnecting: '重连中…',
-  edit: '编辑',
-  enabledLabel: '启用',
-  disabledLabel: '停用',
-  addServer: '添加服务器',
+  reconnect: '重新连接',
   refresh: '刷新',
-  addTitle: '添加服务器',
-  editTitle: '编辑 {name}',
-  backToList: '返回',
-  deleteServer: '删除',
-  deleteTitle: '删除 {name}？',
-  confirmDelete: '删除',
-  deleting: '删除中…',
-  deleteHint: '删除后将移除该服务器配置并卸载其工具，无法撤销。',
-  fieldServerName: '名称',
-  fieldTransport: '传输方式',
-  fieldUrl: '服务地址',
-  fieldCommand: '启动命令',
-  fieldArgs: '参数',
-  fieldArgsPlaceholder: '空格分隔，例如 --port 8080',
-  fieldHeaders: '请求头（可选）',
-  fieldTimeout: '连接超时（秒）',
-  timeoutHint: '保存或重连时等待连接的最长时间。',
   cancel: '取消',
-  save: '保存',
-  addAndConnect: '添加',
-  savingBusy: '保存中…',
-  addingBusy: '添加中…',
-  invalidHeaders: '请求头必须是有效的 JSON 对象。',
-  nameRequired: '请输入服务器名称。',
-  urlRequired: '请输入服务地址。',
+  disable: '停用',
+  retry: '重试',
   timeoutMsg: '连接超时（{n} 秒），可稍后刷新状态。',
-  addFailed: '添加失败',
-  updateFailed: '保存失败',
   toggleFailed: '切换状态失败',
-  serverNameLocked: '名称创建后不可修改。',
-  advancedSettings: '高级设置',
-  tokenLabel: '接口访问令牌（可选）',
-  tokenHint: '服务端开启鉴权时填写，留空则不携带令牌。',
-  authType: '认证方式',
-  authTypeNone: '无 / 自定义请求头',
-  authTypeOAuth: 'OAuth 2.0',
-  oauthStatus: '授权状态',
-  oauthAuthorized: '已授权',
-  oauthNotAuthorized: '未授权',
-  oauthAuthorizeBtn: '前往授权',
-  oauthAuthorizing: '等待授权…',
   oauthRevokeBtn: '清除授权',
-  oauthClientId: 'Client ID（可选）',
-  oauthClientIdHint: '留空则自动动态注册客户端。',
-  oauthScopes: '权限范围（可选）',
-  oauthScopesHint: '空格分隔，例如 read write。',
-  oauthExpiresAt: '有效期至 {time}',
-  oauthSuccessMsg: '授权成功，已连接。',
-  oauthFailedMsg: '授权失败：{error}',
+  revokeFailed: '清除授权失败，请重试。',
+  oauthCopyLink: '复制授权链接',
+  oauthLinkCopied: '已复制授权链接',
+  subServices: '包含服务',
+  connectorTools: '可用工具',
+  connectorToolsCount: '可用工具 ({n})',
+  searchTools: '搜索工具…',
+  noTools: '暂无已加载工具',
+  maintenance: '连接管理',
+  agentPluginImport: '导入 Agent Plugin',
+  agentPluginDirectory: '本机目录或 ZIP 路径',
+  agentPluginBrowse: '选择目录',
+  agentPluginZip: '选择 ZIP',
+  agentPluginZipInvalid: '请选择不超过 16 MiB 的 ZIP 文件。',
+  agentPluginDiscover: '从本机发现',
+  agentPluginDiscoveryEmpty: '未找到可导入的插件或配置。',
+  agentPluginPreview: '预览',
+  agentPluginPreviewLoading: '正在检查…',
+  agentPluginPreviewFailed: '无法预览 Agent Plugin。',
+  agentPluginImportBack: '返回',
+  agentPluginImportMcp: 'MCP 服务（{n}）',
+  agentPluginStdioCommands: '将在本机运行的命令',
+  agentPluginStdioConfirm: '我确认允许插件运行以上命令。',
+  agentPluginBrowseFailed: '无法打开目录选择器，可以直接输入路径。',
+  agentPluginImportConfirm: '导入并启用',
+  agentPluginImporting: '正在导入…',
+  agentPluginImportFailed: '导入 Agent Plugin 失败。',
+  agentPluginSkills: '附带技能（{n}）',
+  agentPluginSkillSource: '来源 · {name}',
+  agentPluginManage: '插件管理',
+  agentPluginEnabled: '已启用',
+  agentPluginDisabled: '已停用',
+  agentPluginToggle: '启用插件 {name}',
+  agentPluginRemove: '移除导入',
+  agentPluginExport: '导出压缩包…',
+  agentPluginExportFormat: '目标格式',
+  agentPluginExportDownload: '下载 ZIP',
+  agentPluginExporting: '正在导出…',
+  agentPluginExportFailed: '无法导出 Agent Plugin。',
+  agentPluginChangeFailed: '无法更新 Agent Plugin。',
+  customSectionTitle: '自定义 MCP 服务',
+  customEmpty: '暂未添加自定义 MCP 服务',
+  customAdd: '添加服务',
+  customDelete: '删除',
+  customDeleteFailed: '删除服务失败，请重试。',
+  customAddFailed: '添加服务失败，请检查配置。',
+  customServerName: '服务标识',
+  customTransport: '传输协议',
+  customUrl: '服务地址 (URL)',
+  customCommand: '启动命令',
+  customArgs: '命令参数（空格分隔）',
+  customCwd: '工作目录（可选）',
+  customAuthType: '认证方式',
+  customAuthNone: '无认证',
+  customAuthOAuth: 'OAuth',
+  customSave: '确认添加',
+  customNameInvalid: '服务标识需为 1-32 位字母、数字、下划线或连字符。',
+  customUrlInvalid: '请输入以 http:// 或 https:// 开头的服务地址。',
+  customCommandRequired: '请输入启动命令。',
 }
 
 export const en: Record<LocaleKey, string> = {
@@ -167,75 +193,88 @@ export const en: Record<LocaleKey, string> = {
   oauthPopupClosed: 'Authorization window closed before completion.',
   oauthStillWaiting: 'Timed out waiting for authorization. Refresh after signing in.',
 
-  nav: 'MCP',
-  title: 'MCP Servers',
-  intro: 'Configure MCP servers whose tools are available across sessions.',
+  nav: 'Connectors',
+  skillsTab: 'Skills',
+  tabsLabel: 'Connectors page tabs',
+  backToConnectors: 'Back to Connectors',
+  configure: 'Configure',
+  connectorConnect: 'Connect',
+  connectorConnected: 'Connected',
+  connectorWaiting: 'Awaiting authorization',
+  connectorToggle: 'Enable {name}',
   loading: 'Loading…',
-  empty: 'No MCP servers configured.',
-  connected: 'Connected · {n} tools',
+  loadFailed: 'Could not load connectors. Try refreshing.',
+  groupStatus: '{n} of {total} connected',
   connecting: 'Connecting…',
-  error: 'Connection failed',
-  offline: 'Offline',
-  disabled: 'Disabled',
+  error: 'Connection error',
   disconnected: 'Disconnected',
-  unknown: 'Unknown',
-  offlineHint: 'Server unreachable; will reconnect automatically when available.',
   reconnect: 'Reconnect',
-  reconnecting: 'Reconnecting…',
-  edit: 'Edit',
-  enabledLabel: 'Enable',
-  disabledLabel: 'Disable',
-  addServer: 'Add server',
   refresh: 'Refresh',
-  addTitle: 'Add server',
-  editTitle: 'Edit {name}',
-  backToList: 'Back',
-  deleteServer: 'Delete',
-  deleteTitle: 'Delete {name}?',
-  confirmDelete: 'Delete',
-  deleting: 'Deleting…',
-  deleteHint: 'Removes this server configuration and unloads its tools. This cannot be undone.',
-  fieldServerName: 'Name',
-  fieldTransport: 'Transport',
-  fieldUrl: 'Endpoint URL',
-  fieldCommand: 'Command',
-  fieldArgs: 'Arguments',
-  fieldArgsPlaceholder: 'Space-separated, e.g. --port 8080',
-  fieldHeaders: 'Headers (optional)',
-  fieldTimeout: 'Connection timeout (s)',
-  timeoutHint: 'Maximum time to wait for a connection after saving or reconnecting.',
   cancel: 'Cancel',
-  save: 'Save',
-  addAndConnect: 'Add',
-  savingBusy: 'Saving…',
-  addingBusy: 'Adding…',
-  invalidHeaders: 'Headers must be a valid JSON object.',
-  nameRequired: 'Enter a server name.',
-  urlRequired: 'Enter an endpoint URL.',
+  disable: 'Disable',
+  retry: 'Retry',
   timeoutMsg: 'Connection timed out ({n}s). Refresh to check the latest status.',
-  addFailed: 'Failed to add server',
-  updateFailed: 'Failed to save server',
   toggleFailed: 'Failed to update status',
-  serverNameLocked: 'Name cannot be changed after creation.',
-  advancedSettings: 'Advanced settings',
-  tokenLabel: 'API access token (optional)',
-  tokenHint: 'Only needed when the MCP manager API requires a bearer token.',
-  authType: 'Authentication',
-  authTypeNone: 'None / Headers',
-  authTypeOAuth: 'OAuth 2.0',
-  oauthStatus: 'Authorization',
-  oauthAuthorized: 'Authorized',
-  oauthNotAuthorized: 'Not authorized',
-  oauthAuthorizeBtn: 'Authorize',
-  oauthAuthorizing: 'Authorizing…',
-  oauthRevokeBtn: 'Revoke',
-  oauthClientId: 'Client ID (optional)',
-  oauthClientIdHint: 'Leave blank to use dynamic client registration.',
-  oauthScopes: 'Scopes (optional)',
-  oauthScopesHint: 'Space-separated, e.g. read write.',
-  oauthExpiresAt: 'Expires {time}',
-  oauthSuccessMsg: 'Authorized and connected.',
-  oauthFailedMsg: 'Authorization failed: {error}',
+  oauthRevokeBtn: 'Sign out / Revoke',
+  revokeFailed: 'Could not revoke authorization. Try again.',
+  oauthCopyLink: 'Copy authorization link',
+  oauthLinkCopied: 'Authorization link copied',
+  subServices: 'Services',
+  connectorTools: 'Tools',
+  connectorToolsCount: 'Tools ({n})',
+  searchTools: 'Filter tools…',
+  noTools: 'No tools loaded yet',
+  maintenance: 'Maintenance',
+  agentPluginImport: 'Import Agent Plugin',
+  agentPluginDirectory: 'Local folder or ZIP path',
+  agentPluginBrowse: 'Choose Folder',
+  agentPluginZip: 'Choose ZIP',
+  agentPluginZipInvalid: 'Choose a ZIP file up to 16 MiB.',
+  agentPluginDiscover: 'Discover on this device',
+  agentPluginDiscoveryEmpty: 'No importable plugins or settings found.',
+  agentPluginPreview: 'Preview',
+  agentPluginPreviewLoading: 'Checking…',
+  agentPluginPreviewFailed: 'Could not preview the Agent Plugin.',
+  agentPluginImportBack: 'Back',
+  agentPluginImportMcp: 'MCP servers ({n})',
+  agentPluginStdioCommands: 'Commands that will run on this device',
+  agentPluginStdioConfirm: 'I allow this plugin to run the commands above.',
+  agentPluginBrowseFailed: 'Could not open the folder picker. You can enter the path directly.',
+  agentPluginImportConfirm: 'Import and Enable',
+  agentPluginImporting: 'Importing…',
+  agentPluginImportFailed: 'Could not import the Agent Plugin.',
+  agentPluginSkills: 'Included Skills ({n})',
+  agentPluginSkillSource: 'Source · {name}',
+  agentPluginManage: 'Plugin Management',
+  agentPluginEnabled: 'Enabled',
+  agentPluginDisabled: 'Disabled',
+  agentPluginToggle: 'Enable plugin {name}',
+  agentPluginRemove: 'Remove Import',
+  agentPluginExport: 'Export ZIP…',
+  agentPluginExportFormat: 'Target format',
+  agentPluginExportDownload: 'Download ZIP',
+  agentPluginExporting: 'Exporting…',
+  agentPluginExportFailed: 'Could not export the Agent Plugin.',
+  agentPluginChangeFailed: 'Could not update the Agent Plugin.',
+  customSectionTitle: 'Custom MCP Servers',
+  customEmpty: 'No custom MCP servers configured',
+  customAdd: 'Add Server',
+  customDelete: 'Delete',
+  customDeleteFailed: 'Failed to delete server. Try again.',
+  customAddFailed: 'Failed to add server. Check the configuration.',
+  customServerName: 'Server ID',
+  customTransport: 'Transport',
+  customUrl: 'Server URL',
+  customCommand: 'Command',
+  customArgs: 'Arguments (space-separated)',
+  customCwd: 'Working directory (optional)',
+  customAuthType: 'Authentication',
+  customAuthNone: 'None',
+  customAuthOAuth: 'OAuth',
+  customSave: 'Add',
+  customNameInvalid: 'Server ID must match 1-32 letters, numbers, underscores, or hyphens.',
+  customUrlInvalid: 'Enter a URL starting with http:// or https://.',
+  customCommandRequired: 'Enter a startup command.',
 }
 
 /** Render a template string, replacing `{name}` / `{n}` placeholders. */

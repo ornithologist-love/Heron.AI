@@ -297,6 +297,7 @@ function tierFor(source: string, provider?: string): SkillManagerEntry['tier'] {
       // dsh-badge provider) are system skills; any other provider mounting a
       // bundled root is a plugin contribution.
       return provider !== undefined && SYSTEM_BUNDLED_PROVIDERS.has(provider) ? 'system' : 'plugin'
+    case 'agent-plugin': return 'plugin'
     case 'user-dsh':
     case 'user-agents': return 'user'
     case 'project-dsh':

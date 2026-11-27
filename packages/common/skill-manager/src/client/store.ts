@@ -1,5 +1,5 @@
 /**
- * Skill Manager settings-page store: catalog fetch state, workspace grouping
+ * Skill Manager store: catalog fetch state, workspace grouping
  * for project skills, and the file-tree / read / write operations over skill
  * directories. The host stays the single fact source — every read goes
  * through the `/skill-manager` wire endpoints and the page re-renders from

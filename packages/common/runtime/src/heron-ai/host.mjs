@@ -8,7 +8,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { ai_provider_definitions } from './acp/runtime/providers.mjs'
 import { backendPreset } from './acp/providers.mjs'
 
-export const inject = ['appReady', 'appExit', 'webServer', 'connection', 'agents', 'workspaceRegistry', 'sessionNavigationInput', 'themeBootstrap', 'hmr', 'clientModules']
+export const inject = ['appReady', 'appExit', 'webServer', 'connection', 'agents', 'workspaceRegistry', 'sessionNavigationInput', 'themeBootstrap', 'hmr', 'clientModules', 'mcpManager']
 
 export async function apply(ctx, config) {
   const emit = value => process.stdout.write(JSON.stringify(value) + '\n')

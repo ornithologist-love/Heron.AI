@@ -1,80 +1,130 @@
 /**
  * dsh-mcp-manager — browser half.
  *
- * Registers the "MCP" section into the Web settings page
- * (`settings.section` slot) and renders the server management card. The card
- * talks to the host half through plain HTTP routes under `/mcp-manager/api/*`
- * (the settings-namespace allowlist cannot expose third-party namespaces, so
- * the UI deliberately does not use `settingsScope`).
- *
- * Two views: a list of server cards, and a form page (add / edit). Opening the
- * form hides the list; deleting asks for confirmation via the official Modal.
- *
- * Theming: every control and color uses `@deepseek-ai/dsh-client-ui-primitives`
- * and `--dsw-alias-*` tokens, so the page follows DSH's light/dark mode.
- * i18n: all strings come from the `mcpManager` locale namespace (zh/en).
+ * Presents registered connectors on the Connectors page with a unified 4-state model,
+ * equal-height overview cards, an in-page detail view, and custom MCP server
+ * management.
  *
  * @module dsh-mcp-manager/client
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from 'react'
 import {
-  Button, IconChevronLeftOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular,
-  Input, Modal, SegmentedControl, StateDot, Switch, Tag,
+  Button,
+  IconChevronLeftOutlineRegular,
+  IconChevronRightOutlineRegular,
+  IconFolderOpenOutlineRegular,
+  IconPlusOutlineRegular,
+  IconRefreshOutlineRegular,
+  IconSearchOutlineRegular,
+  Input,
+  SegmentedTabs,
+  StateDot,
+  Switch,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ClientContext } from '@deepseek-ai/dsh-client-runtime/client'
+import type { AgentPluginCandidate, AgentPluginCommitInput, AgentPluginDiscoverySource, AgentPluginPreview } from '../agent-plugin-import-contract.ts'
+import {
+  AgentPluginExport, AgentPluginImport, type AgentPluginExportFormat, type AgentPluginPreviewInput, type AgentPluginView,
+} from './agent-plugins.tsx'
 import { en, fmt, zh, type LocaleKey } from './locales.ts'
-import { authorizeOAuth, reconnectWithOAuth } from './reconnect.ts'
+import { reconnectWithOAuth } from './reconnect.ts'
+import { ConnectorCard, connectorGrid, type ConnectorCardProps } from './connector-card.tsx'
+import { ConnectorsPanelIcon } from './ConnectorsPanelIcon.tsx'
+import { connectorOverview, deriveConnectorState, filterCustomServers, type ConnectorTab, type ConnectorTone } from './state.ts'
 import styles from './mcp-manager-section.module.css'
 
-export interface OAuthTokensView {
-  accessToken: string
-  tokenType?: string
-  refreshToken?: string
-  expiresAt?: number
-  scope?: string
-}
-
-export interface McpServerOAuthConfigView {
-  clientId?: string
-  clientSecret?: string
-  scopes?: string[]
-  authorizationServerUrl?: string
-  tokens?: OAuthTokensView
+interface ConnectorBrand {
+  title: string
+  description: { zh: string; en: string }
+  icon?: string
 }
 
 export interface McpServerView {
   serverName: string
-  transport: 'stdio' | 'streamable-http'
-  url?: string
-  headers?: Record<string, string>
-  command?: string
-  args?: string[]
-  env?: Record<string, string>
-  cwd?: string
-  toolCallTimeoutMs?: number
-  failOnStartupError?: boolean
+  agentPluginId?: string
+  connectorPresentation: ConnectorBrand & { id?: string; group?: ConnectorBrand & { id: string } }
+  authorized?: boolean
+  toolNames?: string[]
   enabled?: boolean
   status?: string
-  toolCount?: number
   error?: string
   authType?: 'none' | 'oauth'
-  oauth?: McpServerOAuthConfigView
+}
+
+export interface CustomMcpServer {
+  serverName: string
+  transport: 'stdio' | 'streamable-http'
+  url?: string
+  command?: string
+  args?: string[]
+  cwd?: string
+  enabled?: boolean
+  status?: string
+  error?: string
+  authType?: 'none' | 'oauth'
+  authorized?: boolean
+  toolNames?: string[]
+  connectorPresentation?: unknown
+}
+
+export interface ConnectorDetailService {
+  id: string
+  name: string
+  meta?: string
+  actions?: ReactNode
+}
+
+export interface ConnectorDetailTool {
+  name: string
+  description?: string
+  tag?: string
+}
+
+export interface ConnectorDetailProps {
+  id: string
+  name: string
+  icon?: string
+  description: string
+  status: string
+  tone: ConnectorTone
+  actions?: ReactNode
+  notice?: ReactNode
+  services?: ConnectorDetailService[]
+  servicesTitle?: string
+  tools?: ConnectorDetailTool[]
+  maintenance?: ReactNode
+  extra?: ReactNode
 }
 
 export interface McpManagerSectionInjected {
   list: () => Promise<McpServerView[]>
-  add: (entry: McpServerView) => Promise<void>
-  update: (serverName: string, entry: McpServerView) => Promise<void>
+  listAll?: () => Promise<CustomMcpServer[]>
+  listAgentPlugins?: () => Promise<{ plugins: AgentPluginView[]; canManage: boolean }>
+  pickPluginDirectory?: () => Promise<string | null>
   setEnabled: (serverName: string, enabled: boolean) => Promise<void>
-  remove: (serverName: string) => Promise<void>
   reconnect: (serverName: string) => Promise<void>
+  skillsSlot: { subscribe(listener: () => void): () => void; getSnapshot(): boolean }
+}
+
+export interface ConnectorSlotProps {
+  activeDetailId: string | null
+  openDetail: (id: string) => void
+  closeDetail: () => void
+  renderConnector: (card: ConnectorCardProps) => ReactNode
+  renderDetail: (detail: ConnectorDetailProps) => ReactNode
 }
 
 export interface McpManagerSectionProps extends McpManagerSectionInjected {
-  /** Bound to the `mcpManager` locale namespace by the settings shell. */
+  /** Bound to the `mcpManager` locale namespace by the main slot. */
   t: (key: LocaleKey) => string
-  // The settings shell may bind additional runtime props; we only need the face above.
+  language?: () => 'zh' | 'en'
+  renderSlot?: {
+    (name: 'settings.connectors.card', props: ConnectorSlotProps): ReactNode
+    (name: 'connectors.skills', props: Record<never, never>): ReactNode
+  }
+  renderFactorySlot?: (name: 'connectors.cards', props: ConnectorSlotProps) => ReactNode
+  // The slot runtime may bind additional props.
   [key: string]: unknown
 }
 
@@ -82,22 +132,29 @@ export interface McpManagerSectionProps extends McpManagerSectionInjected {
 export const NS = 'mcpManager'
 
 const API = '/mcp-manager/api'
-
-/** Poll cadence while waiting for a connection to settle. */
 const POLL_INTERVAL_MS = 800
-/** Default connection wait before giving up (seconds). */
 const DEFAULT_WAIT_SECONDS = 15
-/** localStorage key for the optional access token entered by the user. */
 const TOKEN_STORAGE_KEY = 'mcpManager.accessToken'
+const SERVER_NAME_RE = /^[A-Za-z0-9_-]{1,32}$/
 
-/** Current access token sent on every request ("" = none configured). */
-let accessToken = ''
+const agentPluginDetailId = (id: string) => `agent-plugin:${id}`
 
-async function request<T>(url: string, init?: RequestInit): Promise<T> {
+const dotStates: Record<ConnectorTone, 'done' | 'ongoing' | 'error' | 'idle'> = {
+  connected: 'done',
+  connecting: 'ongoing',
+  error: 'error',
+  disconnected: 'idle',
+}
+
+function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const headers = new Headers(init?.headers)
-  headers.set('Content-Type', 'application/json')
+  if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  const accessToken = window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
   if (accessToken !== '') headers.set('Authorization', `Bearer ${accessToken}`)
-  const response = await fetch(url, { ...init, headers })
+  return fetch(url, { ...init, headers })
+}
+
+async function readJsonResponse<T>(response: Response): Promise<T> {
   let body: { ok: boolean; error?: string } & T
   try {
     body = await response.json() as typeof body
@@ -110,587 +167,333 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return body
 }
 
-/** Poll the server list until every entry settles (terminal states) or the timeout elapses. */
-async function pollServers(timeoutMs: number): Promise<{ servers: McpServerView[]; timedOut: boolean }> {
-  const deadline = Date.now() + timeoutMs
-  let servers: McpServerView[] = []
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  return readJsonResponse<T>(await apiFetch(url, init))
+}
+
+function discardAgentPlugin(id: string): void {
+  void request(`${API}/agent-plugins/discard`, { method: 'POST', body: JSON.stringify({ id }) }).catch(() => undefined)
+}
+
+async function pollServer<T extends { serverName: string; status?: string }>(
+  fetchList: () => Promise<T[]>,
+  serverName: string,
+) {
+  const deadline = Date.now() + DEFAULT_WAIT_SECONDS * 1000
   for (;;) {
-    const body = await request<{ servers: McpServerView[] }>(`${API}/servers`)
-    servers = body.servers
-    const settled = servers.every(s =>
-      s.status === 'connected' || s.status === 'error' || s.status === 'disabled'
-      || s.status === 'disconnected' || s.status === 'offline')
-    if (settled) return { servers, timedOut: false }
-    if (Date.now() >= deadline) return { servers, timedOut: true }
+    const items = await fetchList()
+    if (!items.some(server => server.serverName === serverName && server.status === 'connecting')) {
+      return { items, timedOut: false }
+    }
+    if (Date.now() >= deadline) return { items, timedOut: true }
     await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL_MS))
   }
 }
 
-// ── presentation ─────────────────────────────────────────────────────────────
-// Controls come from `@deepseek-ai/dsh-client-ui-primitives` and layout from
-// the section's CSS module, matching the native settings pages.
-
-type DotState = 'done' | 'warning' | 'ongoing' | 'error' | 'idle'
-
-const statusDot = (status: string | undefined): DotState => {
-  switch (status) {
-    case 'connected': return 'done'
-    case 'connecting': return 'ongoing'
-    case 'error': return 'error'
-    case 'offline': return 'warning'
-    default: return 'idle'
-  }
-}
-
-export function McpManagerSection({ list: _list, add, update, setEnabled, remove, reconnect, t }: McpManagerSectionProps) {
+export function McpManagerSection({
+  list, listAll, listAgentPlugins, pickPluginDirectory, setEnabled, reconnect, skillsSlot, t, language, renderSlot, renderFactorySlot,
+}: McpManagerSectionProps) {
   const [servers, setServers] = useState<McpServerView[]>([])
+  const [customServers, setCustomServers] = useState<CustomMcpServer[]>([])
+  const [agentPlugins, setAgentPlugins] = useState<AgentPluginView[]>([])
+  const [canManageAgentPlugins, setCanManageAgentPlugins] = useState(false)
+  const [showPluginImport, setShowPluginImport] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string>()
   const [busy, setBusy] = useState<string>()
-  /** 'list' shows the server cards; 'form' shows the add/edit page (cards hidden). */
-  const [view, setView] = useState<'list' | 'form'>('list')
-  /** Server currently being edited (null = the form is in add mode). */
-  const [editing, setEditing] = useState<McpServerView | null>(null)
-  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [requestedTab, setRequestedTab] = useState<ConnectorTab>('connectors')
+  const tabsId = useId()
+  const hasSkills = useSyncExternalStore(skillsSlot.subscribe, skillsSlot.getSnapshot)
+  const { showTabs, activeTab } = connectorOverview(requestedTab, hasSkills, selectedId)
+  const [toolFilter, setToolFilter] = useState('')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [formError, setFormError] = useState<string>()
+  const [newName, setNewName] = useState('')
+  const [newTransport, setNewTransport] = useState<'streamable-http' | 'stdio'>('streamable-http')
+  const [newUrl, setNewUrl] = useState('')
+  const [newAuthType, setNewAuthType] = useState<'none' | 'oauth'>('none')
+  const [newCommand, setNewCommand] = useState('')
+  const [newArgs, setNewArgs] = useState('')
+  const [newCwd, setNewCwd] = useState('')
+  const [connectorLink, setConnectorLink] = useState<{ serverName: string; url: string; copy?: 'copied' | 'select' }>()
+  const oauthCancellation = useRef<{ serverName: string; controller: AbortController } | null>(null)
+  useEffect(() => () => oauthCancellation.current?.controller.abort(), [])
 
-  // form fields
-  const [serverName, setServerName] = useState('')
-  const [transport, setTransport] = useState<'stdio' | 'streamable-http'>('streamable-http')
-  const [url, setUrl] = useState('')
-  const [command, setCommand] = useState('')
-  const [args, setArgs] = useState('')
-  const [headers, setHeaders] = useState('')
-  const [waitSeconds, setWaitSeconds] = useState(DEFAULT_WAIT_SECONDS)
-
-  // OAuth form states
-  const [authType, setAuthType] = useState<'none' | 'oauth'>('none')
-  const [oauthClientId, setOauthClientId] = useState('')
-  const [oauthScopes, setOauthScopes] = useState('')
-  const [oauthAuthorizing, setOauthAuthorizing] = useState(false)
-  const [oauthMsg, setOauthMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
-  const oauthCancellation = useRef<AbortController | null>(null)
-  useEffect(() => () => oauthCancellation.current?.abort(), [])
-
-  /** Optional access token, persisted locally so the settings page keeps working. */
-  const [token, setToken] = useState<string>(() => window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? '')
-
-  useEffect(() => {
-    accessToken = window.localStorage.getItem(TOKEN_STORAGE_KEY) ?? ''
-  }, [])
-
-  const handleTokenChange = (value: string): void => {
-    const trimmed = value.trim()
-    setToken(trimmed)
-    accessToken = trimmed
-    if (trimmed === '') window.localStorage.removeItem(TOKEN_STORAGE_KEY)
-    else window.localStorage.setItem(TOKEN_STORAGE_KEY, trimmed)
+  const fetchAllServers = async (): Promise<CustomMcpServer[]> => {
+    if (listAll) return listAll()
+    const body = await request<{ servers: CustomMcpServer[] }>(`${API}/servers`)
+    return body.servers
   }
 
-  const refresh = async (): Promise<void> => {
+  const refresh = async (): Promise<McpServerView[] | undefined> => {
     setLoading(true)
     setError(undefined)
     try {
-      const body = await request<{ servers: McpServerView[] }>(`${API}/servers`)
-      setServers(body.servers)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      const [connectors, all, agentPluginList] = await Promise.all([
+        list(), fetchAllServers(), listAgentPlugins?.(),
+      ])
+      setServers(connectors)
+      setCustomServers(filterCustomServers(all))
+      setAgentPlugins(agentPluginList?.plugins ?? [])
+      setCanManageAgentPlugins(agentPluginList?.canManage === true)
+      return connectors
+    } catch {
+      setError(t('loadFailed'))
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => { void refresh() }, [])
+  useEffect(() => { setToolFilter('') }, [selectedId])
 
-  /** Run an action, then poll until the connection settles or the wait times out, and refresh. */
   const runWithPoll = async (busyKey: string, action: () => Promise<void>, signal?: AbortSignal): Promise<void> => {
     setBusy(busyKey)
     setError(undefined)
     try {
       await action()
       if (signal?.aborted) return
-      const timeoutMs = Number.isFinite(waitSeconds) && waitSeconds > 0 ? waitSeconds * 1000 : DEFAULT_WAIT_SECONDS * 1000
-      const { servers: settled, timedOut } = await pollServers(timeoutMs)
-      setServers(settled)
+      const { items: settledAll, timedOut } = await pollServer(fetchAllServers, busyKey)
+      setCustomServers(filterCustomServers(settledAll))
+      setServers(await list())
       if (timedOut) {
-        setError(fmt(t('timeoutMsg'), { n: Math.round(timeoutMs / 1000) }))
+        setError(fmt(t('timeoutMsg'), { n: DEFAULT_WAIT_SECONDS }))
       }
     } catch (err) {
       if (signal?.aborted) return
-      const message = err instanceof Error ? err.message : String(err)
       await refresh()
-      if (!signal?.aborted) setError(message)
-    } finally {
-      setBusy(current => current === busyKey ? undefined : current)
-    }
-  }
-
-  const resetForm = (): void => {
-    oauthCancellation.current?.abort()
-    setServerName(''); setUrl(''); setCommand(''); setArgs(''); setHeaders(''); setTransport('streamable-http')
-    setAuthType('none'); setOauthClientId(''); setOauthScopes(''); setOauthAuthorizing(false); setOauthMsg(null)
-  }
-
-  const openAddForm = (): void => {
-    setEditing(null)
-    resetForm()
-    setConfirmingDelete(false)
-    setView('form')
-  }
-
-  const startEdit = (server: McpServerView): void => {
-    setEditing(server)
-    setTransport(server.transport)
-    setUrl(server.url ?? '')
-    setCommand(server.command ?? '')
-    setArgs((server.args ?? []).join(' '))
-    setHeaders(server.headers !== undefined ? JSON.stringify(server.headers, null, 2) : '')
-    setAuthType(server.authType ?? 'none')
-    setOauthClientId(server.oauth?.clientId ?? '')
-    setOauthScopes((server.oauth?.scopes ?? []).join(' '))
-    setOauthMsg(null)
-    setConfirmingDelete(false)
-    setView('form')
-  }
-
-  const closeForm = (): void => {
-    setEditing(null)
-    setConfirmingDelete(false)
-    setView('list')
-    resetForm()
-  }
-
-  const submit = async (): Promise<void> => {
-    const entry: McpServerView = {
-      serverName: (editing?.serverName ?? serverName).trim(),
-      transport,
-    }
-    if (transport === 'streamable-http') {
-      entry.url = url.trim()
-      entry.authType = authType
-      if (authType === 'oauth') {
-        entry.oauth = {
-          ...(editing?.oauth ?? {}),
-          clientId: oauthClientId.trim() || undefined,
-          scopes: oauthScopes.split(/\s+/).filter(Boolean),
-        }
-      } else if (headers.trim() !== '') {
-        try {
-          entry.headers = JSON.parse(headers) as Record<string, string>
-        } catch {
-          setError(t('invalidHeaders'))
-          return
-        }
+      if (!signal?.aborted) {
+        const message = err instanceof Error ? err.message : ''
+        const authorizationError = ['oauthPopupBlocked', 'oauthHttpsRequired', 'oauthPopupClosed', 'oauthStillWaiting']
+          .map(key => t(key as LocaleKey)).find(text => text === message)
+        setError(authorizationError ?? t('error'))
       }
-    } else {
-      entry.command = command.trim()
-      entry.args = args.split(/\s+/).filter(Boolean)
-    }
-    if (editing !== null) {
-      await runWithPoll(editing.serverName, async () => {
-        await update(editing.serverName, entry)
-        closeForm()
-      })
-    } else {
-      await runWithPoll('add', async () => {
-        await add(entry)
-        closeForm()
-      })
-    }
-  }
-
-  const startOAuthFlow = async (): Promise<void> => {
-    const targetServerName = (editing?.serverName ?? serverName).trim()
-    const targetUrl = url.trim()
-    if (!targetServerName) {
-      setError(t('nameRequired'))
-      return
-    }
-    if (!targetUrl) {
-      setError(t('urlRequired'))
-      return
-    }
-    setOauthAuthorizing(true)
-    setOauthMsg(null)
-    setError(undefined)
-    const cancellation = new AbortController()
-    oauthCancellation.current?.abort()
-    oauthCancellation.current = cancellation
-
-    try {
-      await authorizeOAuth(request, API, t, {
-        serverName: targetServerName, url: targetUrl,
-        clientId: oauthClientId.trim() || undefined,
-        scopes: oauthScopes.split(/\s+/).filter(Boolean),
-      }, cancellation.signal)
-      const res = await request<{ server: McpServerView }>(`${API}/servers/${encodeURIComponent(targetServerName)}`, { signal: cancellation.signal })
-      setEditing(res.server)
-      setOauthClientId(res.server.oauth?.clientId ?? '')
-      setOauthMsg({ type: 'ok', text: t('oauthSuccessMsg') })
-      await refresh()
-    } catch (err) {
-      if (cancellation.signal.aborted) return
-      setOauthMsg({ type: 'err', text: fmt(t('oauthFailedMsg'), { error: err instanceof Error ? err.message : String(err) }) })
     } finally {
-      if (oauthCancellation.current === cancellation) setOauthAuthorizing(false)
+      if (!signal?.aborted) setBusy(current => current === busyKey ? undefined : current)
     }
   }
 
   const revokeOAuth = async (targetServerName: string): Promise<void> => {
     setBusy(targetServerName)
+    setError(undefined)
     try {
       await request(`${API}/oauth/revoke`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverName: targetServerName }),
       })
-      if (editing && editing.serverName === targetServerName) {
-        setEditing({ ...editing, oauth: undefined })
-      }
       await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } catch {
+      setError(t('revokeFailed'))
     } finally {
       setBusy(undefined)
     }
   }
 
-  /** Delete the edited server once the confirmation dialog is accepted. */
-  const handleDelete = async (): Promise<void> => {
-    if (editing === null) return
-    setBusy(editing.serverName)
+  const connectOrRetryServer = async (server: Pick<McpServerView, 'serverName' | 'enabled' | 'authType'>): Promise<void> => {
+    const cancellation = new AbortController()
+    oauthCancellation.current?.controller.abort()
+    oauthCancellation.current = { serverName: server.serverName, controller: cancellation }
+    setConnectorLink(undefined)
+    const showLink = (url: string) => setConnectorLink({ serverName: server.serverName, url })
+    try {
+      const connect = server.enabled === false ? (id: string) => setEnabled(id, true) : reconnect
+      await runWithPoll(
+        server.serverName,
+        () => reconnectWithOAuth(server as McpServerView, request, API, connect, t, cancellation.signal, showLink),
+        cancellation.signal,
+      )
+    } finally {
+      if (oauthCancellation.current?.controller === cancellation) {
+        oauthCancellation.current = null
+        setConnectorLink(link => link?.serverName === server.serverName ? undefined : link)
+      }
+    }
+  }
+
+  const cancelPendingServer = async (serverName: string): Promise<void> => {
+    if (oauthCancellation.current?.serverName === serverName) {
+      oauthCancellation.current.controller.abort()
+      oauthCancellation.current = null
+    }
+    setConnectorLink(link => link?.serverName === serverName ? undefined : link)
+    try {
+      await setEnabled(serverName, false)
+      await refresh()
+    } catch {
+      setError(t('toggleFailed'))
+    } finally {
+      setBusy(current => current === serverName ? undefined : current)
+    }
+  }
+
+  const toggleEnabled = (serverName: string, nextEnabled: boolean): void => {
+    void runWithPoll(serverName, async () => { await setEnabled(serverName, nextEnabled) })
+  }
+
+  const copyConnectorLink = async (link: NonNullable<typeof connectorLink>): Promise<void> => {
+    let copy: 'copied' | 'select' = 'copied'
+    try { await navigator.clipboard.writeText(link.url) } catch { copy = 'select' }
+    setConnectorLink(current => current?.url === link.url ? { ...current, copy } : current)
+  }
+
+  const renderPrimaryAction = (
+    server: Pick<McpServerView, 'serverName' | 'enabled' | 'authType' | 'status' | 'authorized' | 'error'>,
+    label: string,
+  ): ReactNode => {
+    const link = connectorLink?.serverName === server.serverName ? connectorLink : undefined
+    const derived = deriveConnectorState(server, busy === server.serverName, Boolean(link))
+    const locked = busy !== undefined && busy !== server.serverName
+    switch (derived.action) {
+      case 'connect':
+        return (
+          <Button variant="primary" size="sm" disabled={locked} onClick={() => void connectOrRetryServer(server)}>
+            {t('connectorConnect')}
+          </Button>
+        )
+      case 'cancel':
+        return (
+          <Button variant="outline" size="sm" onClick={() => void cancelPendingServer(server.serverName)}>
+            {t('cancel')}
+          </Button>
+        )
+      case 'toggle':
+        return (
+          <Switch
+            checked
+            disabled={busy !== undefined}
+            label={fmt(t('connectorToggle'), { name: label })}
+            onChange={checked => toggleEnabled(server.serverName, checked)}
+          />
+        )
+      case 'retry':
+        return (
+          <Button variant="outline" size="sm" disabled={locked} onClick={() => void connectOrRetryServer(server)}>
+            {t('retry')}
+          </Button>
+        )
+    }
+  }
+
+  const renderLinkNotice = (serverName: string, errorMessage?: string): ReactNode => {
+    const link = connectorLink?.serverName === serverName ? connectorLink : undefined
+    if (!link && !errorMessage) return undefined
+    return (
+      <div className={styles.noticeBanner}>
+        {errorMessage && <p role="alert" className={styles.error}>{errorMessage}</p>}
+        {link && (
+          <>
+            <span>{t('connectorWaiting')}</span>
+            <div className={styles.noticeActions}>
+              <Button variant="outline" size="sm" onClick={() => void copyConnectorLink(link)}>
+                {t(link.copy === 'copied' ? 'oauthLinkCopied' : 'oauthCopyLink')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void cancelPendingServer(serverName)}>
+                {t('cancel')}
+              </Button>
+            </div>
+            {link.copy === 'select' && (
+              <Input value={link.url} readOnly aria-label={t('oauthCopyLink')} onFocus={e => e.currentTarget.select()} />
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  const previewAgentPlugin = async (input: AgentPluginPreviewInput): Promise<AgentPluginPreview> => {
+    const options: RequestInit = 'file' in input
+      ? { method: 'POST', headers: { 'Content-Type': 'application/zip', 'X-Agent-Plugin-File': encodeURIComponent(input.file.name) }, body: input.file }
+      : { method: 'POST', body: JSON.stringify(input) }
+    const result = await request<{ preview: AgentPluginPreview }>(API + '/agent-plugins/preview', options)
+    return result.preview
+  }
+
+  const discoverAgentPlugins = async (source: AgentPluginDiscoverySource): Promise<AgentPluginCandidate[]> => {
+    const result = await request<{ candidates: AgentPluginCandidate[] }>(API + '/agent-plugins/preview', {
+      method: 'POST', body: JSON.stringify({ source }),
+    })
+    return result.candidates
+  }
+
+  const importAgentPlugin = async (input: AgentPluginCommitInput): Promise<McpServerView[] | undefined> => {
+    setBusy('agent-plugin:import')
+    try {
+      await request(API + '/agent-plugins/commit', { method: 'POST', body: JSON.stringify(input) })
+      return await refresh()
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const manageAgentPlugin = async (plugin: AgentPluginView, action: 'toggle' | 'remove'): Promise<void> => {
+    setBusy(agentPluginDetailId(plugin.id))
     setError(undefined)
     try {
-      await remove(editing.serverName)
-      setConfirmingDelete(false)
-      closeForm()
+      const body = action === 'toggle' ? { id: plugin.id, enabled: !plugin.enabled } : { id: plugin.id }
+      await request(`${API}/agent-plugins/${action}`, { method: 'POST', body: JSON.stringify(body) })
+      if (action === 'remove') setSelectedId(null)
       await refresh()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+    } catch (failure) {
+      setError(failure instanceof Error && failure.message ? failure.message : t('agentPluginChangeFailed'))
     } finally {
       setBusy(undefined)
     }
   }
 
-  const reconnectServer = async (name: string): Promise<void> => {
-    const server = servers.find(item => item.serverName === name)
-    if (!server) return
-    const cancellation = new AbortController()
-    oauthCancellation.current?.abort()
-    oauthCancellation.current = cancellation
-    await runWithPoll(name, () => reconnectWithOAuth(server, request, API, reconnect, t, cancellation.signal), cancellation.signal)
-  }
-
-  /** Enable or disable a server: enabling connects (with poll), disabling disconnects immediately. */
-  const toggleEnabled = (server: McpServerView): void => {
-    const enabling = server.enabled === false
-    void runWithPoll(server.serverName, async () => { await setEnabled(server.serverName, enabling) })
-  }
-
-  const formBusy = busy !== undefined
-  const deleting = editing !== null && busy === editing.serverName
-
-  const statusText = (server: McpServerView): string => {
-    switch (server.status) {
-      case 'connected': return fmt(t('connected'), { n: server.toolCount ?? 0 })
-      case 'connecting': return t('connecting')
-      case 'error': return t('error')
-      case 'offline': return t('offline')
-      case 'disabled': return t('disabled')
-      case 'disconnected': return t('disconnected')
-      default: return server.status ?? t('unknown')
+  const exportAgentPlugin = async (id: string, format: AgentPluginExportFormat): Promise<boolean> => {
+    setBusy('agent-plugin:export')
+    setError(undefined)
+    try {
+      const response = await apiFetch(API + '/agent-plugins/export', {
+        method: 'POST',
+        body: JSON.stringify({ id, format }),
+      })
+      if (!response.ok) await readJsonResponse(response)
+      const fileName = response.headers.get('content-disposition')?.match(/^attachment; filename="([a-z0-9.-]+\.zip)"$/)?.[1]
+      if (response.headers.get('content-type') !== 'application/zip' || !fileName) throw new Error(t('agentPluginExportFailed'))
+      const url = URL.createObjectURL(await response.blob())
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      return true
+    } catch (failure) {
+      setError(failure instanceof Error && failure.message ? failure.message : t('agentPluginExportFailed'))
+      return false
+    } finally {
+      setBusy(undefined)
     }
   }
 
-  const currentOAuthTokens = editing?.oauth?.tokens
+  const renderDetailShell = (detail: ConnectorDetailProps): ReactNode => {
+    const localIcon = detail.icon && /^data:image\/(?:svg\+xml,|png;base64,)/.test(detail.icon) ? detail.icon : undefined
+    const plugin = agentPlugins.find(item => item.connectorIds.includes(detail.id) || agentPluginDetailId(item.id) === detail.id)
+    const tools = detail.tools ?? []
+    const normalizedFilter = toolFilter.trim().toLowerCase()
+    const visibleTools = normalizedFilter
+      ? tools.filter(tool =>
+        tool.name.toLowerCase().includes(normalizedFilter)
+        || tool.description?.toLowerCase().includes(normalizedFilter)
+        || tool.tag?.toLowerCase().includes(normalizedFilter))
+      : tools
 
-  const headersField = (
-    <div className={styles.field}>
-      <span className={styles.fieldLabel}>{t('fieldHeaders')}</span>
-      <textarea
-        className={styles.textarea}
-        aria-label={t('fieldHeaders')}
-        placeholder='{"Authorization": "Bearer <token>"}'
-        value={headers}
-        onChange={e => setHeaders(e.target.value)}
-      />
-    </div>
-  )
-
-  const editorView = (
-    <div className={styles.editor}>
-      <div className={styles.editorHeader}>
-        <Button
-          variant="ghost"
-          size="sm"
-          className={styles.iconButton}
-          icon={<IconChevronLeftOutlineRegular size={14} />}
-          aria-label={t('backToList')}
-          title={t('backToList')}
-          onClick={closeForm}
-        />
-        <span className={styles.editorTitle}>
-          {editing !== null ? fmt(t('editTitle'), { name: editing.serverName }) : t('addTitle')}
-        </span>
-      </div>
-
-      <div className={styles.field}>
-        <span className={styles.fieldLabel}>{t('fieldServerName')}</span>
-        <Input
-          className={styles.inputField}
-          aria-label={t('fieldServerName')}
-          placeholder="my-server"
-          value={editing !== null ? editing.serverName : serverName}
-          disabled={editing !== null}
-          title={editing !== null ? t('serverNameLocked') : undefined}
-          onChange={e => setServerName(e.target.value)}
-        />
-      </div>
-
-      <div className={styles.field}>
-        <span className={styles.fieldLabel}>{t('fieldTransport')}</span>
-        <SegmentedControl<'streamable-http' | 'stdio'>
-          id="mcp-transport"
-          className={styles.segmented}
-          value={transport}
-          label={t('fieldTransport')}
-          options={[
-            { value: 'streamable-http', label: 'HTTP / SSE' },
-            { value: 'stdio', label: 'stdio' },
-          ]}
-          onChange={setTransport}
-        />
-      </div>
-
-      {transport === 'streamable-http' ? (
-        <>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>{t('fieldUrl')}</span>
-            <Input
-              className={styles.inputField}
-              aria-label={t('fieldUrl')}
-              placeholder="http://127.0.0.1:8080/mcp"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-            />
+    return (
+      <div className={styles.detailView} data-connector-detail={detail.id}>
+        <div className={styles.header}>
+          <div className={styles.headerLeft}>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<IconChevronLeftOutlineRegular size={16} />}
+              onClick={() => setSelectedId(null)}
+            >
+              {t('backToConnectors')}
+            </Button>
           </div>
-
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>{t('authType')}</span>
-            <SegmentedControl<'none' | 'oauth'>
-              id="mcp-auth"
-              className={styles.segmented}
-              value={authType}
-              label={t('authType')}
-              options={[
-                { value: 'none', label: t('authTypeNone') },
-                { value: 'oauth', label: t('authTypeOAuth') },
-              ]}
-              onChange={setAuthType}
-            />
-          </div>
-
-          {authType === 'oauth' ? (
-            <div className={styles.group}>
-              <div className={styles.groupHead}>
-                <span className={styles.fieldLabel}>{t('oauthStatus')}</span>
-                {currentOAuthTokens?.accessToken ? (
-                  <Tag tone="success">
-                    {t('oauthAuthorized')}
-                    {currentOAuthTokens.expiresAt ? ` · ${fmt(t('oauthExpiresAt'), { time: new Date(currentOAuthTokens.expiresAt).toLocaleTimeString() })}` : ''}
-                  </Tag>
-                ) : (
-                  <Tag tone="outline">{t('oauthNotAuthorized')}</Tag>
-                )}
-              </div>
-
-              {oauthMsg && <p className={oauthMsg.type === 'ok' ? styles.ok : styles.error}>{oauthMsg.text}</p>}
-
-              <div className={styles.groupActions}>
-                <Button variant="outline" size="sm" disabled={oauthAuthorizing} onClick={() => void startOAuthFlow()}>
-                  {oauthAuthorizing ? t('oauthAuthorizing') : t('oauthAuthorizeBtn')}
-                </Button>
-                {currentOAuthTokens?.accessToken && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={styles.dangerButton}
-                    disabled={oauthAuthorizing || busy === (editing?.serverName ?? serverName)}
-                    onClick={() => void revokeOAuth(editing?.serverName ?? serverName)}
-                  >
-                    {t('oauthRevokeBtn')}
-                  </Button>
-                )}
-              </div>
-
-              <div className={styles.field}>
-                <span className={styles.fieldLabel}>{t('oauthClientId')}</span>
-                <Input
-                  className={styles.inputField}
-                  aria-label={t('oauthClientId')}
-                  placeholder="client-id-123"
-                  value={oauthClientId}
-                  onChange={e => setOauthClientId(e.target.value)}
-                />
-                <p className={styles.hint}>{t('oauthClientIdHint')}</p>
-              </div>
-              <div className={styles.field}>
-                <span className={styles.fieldLabel}>{t('oauthScopes')}</span>
-                <Input
-                  className={styles.inputField}
-                  aria-label={t('oauthScopes')}
-                  placeholder="read write"
-                  value={oauthScopes}
-                  onChange={e => setOauthScopes(e.target.value)}
-                />
-                <p className={styles.hint}>{t('oauthScopesHint')}</p>
-              </div>
-            </div>
-          ) : headersField}
-        </>
-      ) : (
-        <>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>{t('fieldCommand')}</span>
-            <Input
-              className={styles.inputField}
-              aria-label={t('fieldCommand')}
-              placeholder="npx"
-              value={command}
-              onChange={e => setCommand(e.target.value)}
-            />
-          </div>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>{t('fieldArgs')}</span>
-            <Input
-              className={styles.inputField}
-              aria-label={t('fieldArgs')}
-              placeholder={t('fieldArgsPlaceholder')}
-              value={args}
-              onChange={e => setArgs(e.target.value)}
-            />
-          </div>
-        </>
-      )}
-
-      <div className={styles.field}>
-        <span className={styles.fieldLabel}>{t('fieldTimeout')}</span>
-        <Input
-          className={`${styles.inputField} ${styles.numberInput}`}
-          aria-label={t('fieldTimeout')}
-          type="number"
-          min={1}
-          max={120}
-          value={String(waitSeconds)}
-          onChange={e => { const n = Number(e.target.value); setWaitSeconds(Number.isFinite(n) ? n : DEFAULT_WAIT_SECONDS) }}
-        />
-        <p className={styles.hint}>{t('timeoutHint')}</p>
-      </div>
-
-      <div className={styles.editorActions}>
-        {editing !== null && (
-          <Button variant="ghost" data-danger className={styles.dangerButton} disabled={formBusy || oauthAuthorizing} onClick={() => setConfirmingDelete(true)}>
-            {t('deleteServer')}
-          </Button>
-        )}
-        <Button variant="outline" disabled={formBusy} onClick={closeForm}>{t('cancel')}</Button>
-        <Button variant="primary" disabled={formBusy || oauthAuthorizing} onClick={() => void submit()}>
-          {formBusy
-            ? (editing !== null ? t('savingBusy') : t('addingBusy'))
-            : (editing !== null ? t('save') : t('addAndConnect'))}
-        </Button>
-      </div>
-    </div>
-  )
-
-  const listView = (
-    <>
-      {loading && servers.length === 0 ? <p className={styles.hint}>{t('loading')}</p> : servers.length === 0 ? (
-        <p className={styles.empty}>{t('empty')}</p>
-      ) : (
-        <ul className={styles.rows}>
-          {servers.map(server => {
-            const disabled = server.enabled === false
-            const rowBusy = busy === server.serverName
-            const isOAuth = server.authType === 'oauth'
-            const hasOAuthToken = Boolean(server.oauth?.tokens?.accessToken)
-            const dot = statusDot(server.status)
-            const endpoint = server.transport === 'streamable-http'
-              ? server.url ?? ''
-              : [server.command, ...(server.args ?? [])].filter(Boolean).join(' ')
-            return (
-              <li key={server.serverName} className={styles.rowCard} data-disabled={disabled || undefined}>
-                <div className={styles.rowHead}>
-                  <span className={styles.rowIdentity}>
-                    <span className={styles.rowName}>{server.serverName}</span>
-                    <Tag tone="neutral">{server.transport === 'streamable-http' ? 'HTTP' : 'stdio'}</Tag>
-                    {isOAuth && <Tag tone={hasOAuthToken ? 'success' : 'outline'}>OAuth</Tag>}
-                  </span>
-                  <span className={styles.rowActions}>
-                    {!disabled && (
-                      <Button variant="outline" size="sm" disabled={rowBusy} onClick={() => void reconnectServer(server.serverName)}>
-                        {rowBusy ? t('reconnecting') : t('reconnect')}
-                      </Button>
-                    )}
-                    <Button variant="outline" size="sm" disabled={rowBusy} onClick={() => startEdit(server)}>
-                      {t('edit')}
-                    </Button>
-                    <Switch
-                      checked={!disabled}
-                      disabled={rowBusy}
-                      label={disabled ? t('disabledLabel') : t('enabledLabel')}
-                      title={disabled ? t('disabledLabel') : t('enabledLabel')}
-                      onChange={() => toggleEnabled(server)}
-                    />
-                  </span>
-                </div>
-                <div className={styles.rowMeta}>
-                  <span className={styles.status} data-state={dot}>
-                    <StateDot state={dot} size={dot === 'ongoing' ? 12 : 8} />
-                    {statusText(server)}
-                  </span>
-                  {endpoint !== '' && <span className={styles.separator}>·</span>}
-                  {endpoint !== '' && <span className={styles.endpoint} title={endpoint}>{endpoint}</span>}
-                </div>
-                {server.status === 'error' && server.error !== undefined && (
-                  <p className={styles.rowError} title={server.error}>{server.error}</p>
-                )}
-                {server.status === 'offline' && <p className={styles.rowHint}>{t('offlineHint')}</p>}
-              </li>
-            )
-          })}
-        </ul>
-      )}
-
-      <button type="button" className={styles.addButton} onClick={openAddForm}>
-        <IconPlusOutlineRegular size={14} />
-        {t('addServer')}
-      </button>
-
-      <details className={styles.advanced} open={token !== '' ? true : undefined}>
-        <summary className={styles.advancedSummary}>{t('advancedSettings')}</summary>
-        <div className={styles.advancedBody}>
-          <div className={styles.field}>
-            <span className={styles.fieldLabel}>{t('tokenLabel')}</span>
-            <Input
-              type="password"
-              className={styles.inputField}
-              aria-label={t('tokenLabel')}
-              placeholder="Bearer <token>"
-              value={token}
-              onChange={e => handleTokenChange(e.target.value)}
-            />
-            <p className={styles.hint}>{t('tokenHint')}</p>
-          </div>
-        </div>
-      </details>
-    </>
-  )
-
-  return (
-    <div className={styles.section}>
-      <div className={styles.header}>
-        <h2 className={styles.title}>{t('title')}</h2>
-        {view === 'list' && (
           <Button
             variant="ghost"
             size="sm"
@@ -701,64 +504,701 @@ export function McpManagerSection({ list: _list, add, update, setEnabled, remove
             disabled={loading}
             onClick={() => void refresh()}
           />
+        </div>
+
+        <header className={styles.detailHeader}>
+          <div className={styles.detailIdentity}>
+            <span className={styles.detailIcon} data-branded={localIcon ? '' : undefined} aria-hidden="true">
+              {localIcon ? <img src={localIcon} alt="" width={26} height={26} /> : <ConnectorsPanelIcon size={22} />}
+            </span>
+            <div className={styles.detailMeta}>
+              <h2 className={styles.detailTitle}>{detail.name}</h2>
+              {detail.description && <p className={styles.detailDesc}>{detail.description}</p>}
+              <span className={styles.detailStatus} role="status">
+                <StateDot state={dotStates[detail.tone]} size={8} />
+                <span>{detail.status}</span>
+              </span>
+            </div>
+          </div>
+          {detail.actions && <div className={styles.detailActions}>{detail.actions}</div>}
+        </header>
+
+        {error !== undefined && <p role="alert" className={styles.error}>{error}</p>}
+        {detail.notice}
+
+        {detail.services && detail.services.length > 0 && (
+          <section className={styles.detailPanel}>
+            <div className={styles.panelHeader}>
+              <h3 className={styles.panelTitle}>{detail.servicesTitle ?? t('subServices')}</h3>
+            </div>
+            <div className={styles.flatList}>
+              {detail.services.map(service => (
+                <div key={service.id} className={styles.flatRow}>
+                  <div className={styles.flatRowInfo}>
+                    <span className={styles.flatRowTitle}>{service.name}</span>
+                    {service.meta && <span className={styles.flatRowMeta}>{service.meta}</span>}
+                  </div>
+                  {service.actions && <div className={styles.flatRowActions}>{service.actions}</div>}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {detail.extra}
+
+        {(tools.length > 0 || detail.tools !== undefined) && (
+          <section className={styles.detailPanel}>
+            <div className={styles.panelHeader}>
+              <h3 className={styles.panelTitle}>{fmt(t('connectorToolsCount'), { n: tools.length })}</h3>
+              {tools.length > 6 && (
+                <Input
+                  className={styles.toolSearch}
+                  icon={<IconSearchOutlineRegular size={14} />}
+                  placeholder={t('searchTools')}
+                  value={toolFilter}
+                  onChange={e => setToolFilter(e.currentTarget.value)}
+                />
+              )}
+            </div>
+            {visibleTools.length > 0 ? (
+              <ul className={styles.connectorTools}>
+                {visibleTools.map(tool => (
+                  <li key={`${tool.tag ?? ''}:${tool.name}`}>
+                    <div>
+                      <code>{tool.name}</code>
+                      {tool.tag && <span className={styles.toolTag}> · {tool.tag}</span>}
+                    </div>
+                    {tool.description && <span>{tool.description}</span>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={styles.hint}>{t('noTools')}</p>
+            )}
+          </section>
+        )}
+
+        {plugin && plugin.skills.length > 0 && (
+          <section className={styles.detailPanel}>
+            <h3 className={styles.panelTitle}>{fmt(t('agentPluginSkills'), { n: plugin.skills.length })}</h3>
+            <ul className={styles.connectorTools}>
+              {plugin.skills.map(skill => (
+                <li key={skill.name}>
+                  <div>
+                    <div className={styles.flatRowTitle}>{skill.name}</div>
+                    <span className={styles.toolTag}>{fmt(t('agentPluginSkillSource'), { name: plugin.id })}</span>
+                  </div>
+                  {skill.description && <span>{skill.description}</span>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {detail.maintenance && (
+          <footer className={styles.maintenanceFooter}>
+            <span className={styles.maintenanceLabel}>{t('maintenance')}</span>
+            <div className={styles.detailActions}>{detail.maintenance}</div>
+          </footer>
+        )}
+
+        {plugin && canManageAgentPlugins && (
+          <footer className={styles.maintenanceFooter}>
+            <span className={styles.maintenanceLabel}>{t('agentPluginManage')}</span>
+            <div className={styles.detailActions}>
+              <AgentPluginExport
+                key={plugin.id}
+                t={t}
+                busy={busy !== undefined}
+                onExport={format => exportAgentPlugin(plugin.id, format)}
+              />
+              {detail.id !== agentPluginDetailId(plugin.id) && (
+                <Switch
+                  checked={plugin.enabled}
+                  disabled={busy !== undefined}
+                  label={fmt(t('agentPluginToggle'), { name: plugin.name })}
+                  onChange={() => void manageAgentPlugin(plugin, 'toggle')}
+                />
+              )}
+              {plugin.imported && (
+                <Button variant="outline" size="sm" disabled={busy !== undefined} onClick={() => void manageAgentPlugin(plugin, 'remove')}>
+                  {t('agentPluginRemove')}
+                </Button>
+              )}
+            </div>
+          </footer>
         )}
       </div>
-      <p className={styles.intro}>{t('intro')}</p>
+    )
+  }
 
-      {error !== undefined && <p role="alert" className={styles.error}>{error}</p>}
+  // Group MCP servers into single cards vs grouped connectors
+  const groups = new Map<string, McpServerView[]>()
+  const singles: McpServerView[] = []
+  for (const server of servers) {
+    const group = server.connectorPresentation?.group
+    if (!group) singles.push(server)
+    else {
+      const listForGroup = groups.get(group.id)
+      if (listForGroup) listForGroup.push(server)
+      else groups.set(group.id, [server])
+    }
+  }
 
-      {view === 'form' ? editorView : listView}
+  const lang = language?.() ?? 'en'
 
-      <Modal
-        open={confirmingDelete && editing !== null}
-        onClose={() => { if (!deleting) setConfirmingDelete(false) }}
-        title={editing === null ? '' : fmt(t('deleteTitle'), { name: editing.serverName })}
-        closeLabel={t('cancel')}
-        description={t('deleteHint')}
-        className={styles.deleteDialog}
-        footer={(
-          <>
-            <Button variant="outline" data-modal-autofocus disabled={deleting} onClick={() => setConfirmingDelete(false)}>
-              {t('cancel')}
-            </Button>
-            <Button variant="outline" className={styles.deleteConfirm} disabled={deleting} onClick={() => void handleDelete()}>
-              {deleting ? t('deleting') : t('confirmDelete')}
-            </Button>
-          </>
-        )}
-      />
-    </div>
+  // Check if selectedId corresponds to a built-in single or group MCP connector
+  const selectedSingle = selectedId ? singles.find(s => (s.connectorPresentation.id ?? s.serverName) === selectedId) : undefined
+  const selectedGroup = selectedId ? groups.get(selectedId) : undefined
+  const selectedAgentPlugin = selectedId ? agentPlugins.find(plugin =>
+    agentPluginDetailId(plugin.id) === selectedId || plugin.connectorIds.includes(selectedId)) : undefined
+
+  const wrapSection = (content: ReactNode) => (
+    <div className={styles.page}><div className={styles.pageInner}>{content}</div></div>
   )
+
+  const tabId = (tab: ConnectorTab) => `${tabsId}-${tab}`
+  const panelId = (tab: ConnectorTab) => `${tabId(tab)}-panel`
+  const tab = (value: ConnectorTab, label: LocaleKey) => ({
+    value,
+    label: <span className={styles.tabLabel} title={t(label)}>{t(label)}</span>,
+    id: tabId(value),
+    panelId: panelId(value),
+  })
+  const wrapOverview = (content: ReactNode, actions?: ReactNode) => wrapSection(
+    <>
+      <div className={styles.header}>
+        {showTabs ? (
+          <SegmentedTabs<ConnectorTab>
+            size="sm"
+            className={styles.tabs}
+            label={t('tabsLabel')}
+            value={activeTab}
+            onChange={setRequestedTab}
+            items={[
+              tab('connectors', 'nav'),
+              ...(hasSkills ? [tab('skills', 'skillsTab')] : []),
+            ]}
+          />
+        ) : <h1 className={styles.pageTitle}>{t('nav')}</h1>}
+        {actions}
+      </div>
+      {showTabs
+        ? <div className={styles.tabPanel} role="tabpanel" id={panelId(activeTab)} aria-labelledby={tabId(activeTab)}>{content}</div>
+        : content}
+    </>,
+  )
+
+  const renderConnectorSlot = (props: ConnectorSlotProps) =>
+    renderFactorySlot?.('connectors.cards', props) ?? renderSlot?.('settings.connectors.card', props)
+
+  if (selectedSingle) {
+    const pres = selectedSingle.connectorPresentation
+    const id = pres.id ?? selectedSingle.serverName
+    const link = connectorLink?.serverName === selectedSingle.serverName ? connectorLink : undefined
+    const derived = deriveConnectorState(selectedSingle, busy === selectedSingle.serverName, Boolean(link))
+    const canMaintain = derived.tone === 'connected' || derived.tone === 'error' || selectedSingle.authorized === true
+    return wrapSection(renderDetailShell({
+          id,
+          name: pres.title,
+          icon: pres.icon,
+          description: pres.description[lang],
+          status: t(derived.statusKey),
+          tone: derived.tone,
+          actions: renderPrimaryAction(selectedSingle, pres.title),
+          notice: renderLinkNotice(selectedSingle.serverName, derived.tone === 'error' ? selectedSingle.error : undefined),
+          tools: (selectedSingle.toolNames ?? []).map(name => ({ name })),
+          maintenance: canMaintain ? (
+            <>
+              {derived.tone === 'connected' && (
+                <Button variant="outline" size="sm" disabled={busy !== undefined} onClick={() => void connectOrRetryServer(selectedSingle)}>
+                  {t('reconnect')}
+                </Button>
+              )}
+              {selectedSingle.enabled !== false && derived.tone === 'error' && (
+                <Button variant="outline" size="sm" disabled={busy !== undefined} onClick={() => toggleEnabled(selectedSingle.serverName, false)}>
+                  {t('disable')}
+                </Button>
+              )}
+              {selectedSingle.authorized && (
+                <Button variant="outline" size="sm" disabled={busy !== undefined} onClick={() => void revokeOAuth(selectedSingle.serverName)}>
+                  {t('oauthRevokeBtn')}
+                </Button>
+              )}
+            </>
+          ) : undefined,
+        }))
+  }
+
+  if (selectedGroup && selectedGroup.length > 0) {
+    const group = selectedGroup[0].connectorPresentation.group!
+    const memberStates = selectedGroup.map(member => ({
+      member,
+      derived: deriveConnectorState(member, busy === member.serverName, connectorLink?.serverName === member.serverName),
+    }))
+    const connectedCount = memberStates.filter(item => item.derived.tone === 'connected').length
+    const groupTone: ConnectorTone = memberStates.some(item => item.derived.tone === 'connecting') ? 'connecting'
+      : memberStates.some(item => item.derived.tone === 'error') ? 'error'
+        : connectedCount > 0 ? 'connected' : 'disconnected'
+    const groupStatus = connectedCount > 0
+      ? fmt(t('groupStatus'), { n: connectedCount, total: selectedGroup.length })
+      : t(groupTone === 'connecting' ? 'connecting' : groupTone === 'error' ? 'error' : 'disconnected')
+    const allTools: ConnectorDetailTool[] = selectedGroup.flatMap(member =>
+      (member.toolNames ?? []).map(toolName => ({ name: toolName, tag: member.connectorPresentation.title })),
+    )
+    const activeLinkMember = selectedGroup.find(member => connectorLink?.serverName === member.serverName)
+    const anyAuthorized = selectedGroup.some(m => m.authorized)
+    return wrapSection(renderDetailShell({
+          id: group.id,
+          name: group.title,
+          icon: group.icon,
+          description: group.description[lang],
+          status: groupStatus,
+          tone: groupTone,
+          notice: activeLinkMember ? renderLinkNotice(activeLinkMember.serverName) : undefined,
+          services: memberStates.map(({ member, derived }) => ({
+            id: member.serverName,
+            name: member.connectorPresentation.title,
+            meta: [member.connectorPresentation.description[lang], derived.tone === 'error' && member.error ? member.error : t(derived.statusKey)]
+              .filter(Boolean).join(' · '),
+            actions: (
+              <>
+                {renderPrimaryAction(member, member.connectorPresentation.title)}
+                {member.enabled !== false && derived.tone === 'error' && (
+                  <Button variant="ghost" size="sm" disabled={busy !== undefined} onClick={() => toggleEnabled(member.serverName, false)}>
+                    {t('disable')}
+                  </Button>
+                )}
+              </>
+            ),
+          })),
+          tools: allTools,
+          maintenance: anyAuthorized ? (
+            <>
+              {selectedGroup.filter(m => m.authorized).map(m => (
+                <Button key={m.serverName} variant="outline" size="sm" disabled={busy !== undefined}
+                  onClick={() => void revokeOAuth(m.serverName)}>
+                  {`${t('oauthRevokeBtn')} (${m.connectorPresentation.title})`}
+                </Button>
+              ))}
+            </>
+          ) : undefined,
+        }))
+  }
+
+  if (selectedAgentPlugin && selectedId !== null) {
+    const plugin = selectedAgentPlugin
+    return wrapSection(renderDetailShell({
+          id: selectedId,
+          name: plugin.name,
+          icon: plugin.icon,
+          description: plugin.description[lang],
+          status: t(plugin.enabled ? 'agentPluginEnabled' : 'agentPluginDisabled'),
+          tone: plugin.enabled ? 'connected' : 'disconnected',
+          actions: canManageAgentPlugins ? (
+            <Switch
+              checked={plugin.enabled}
+              disabled={busy !== undefined}
+              label={fmt(t('agentPluginToggle'), { name: plugin.name })}
+              onChange={() => void manageAgentPlugin(plugin, 'toggle')}
+            />
+          ) : undefined,
+        }))
+  }
+
+  // Slot-contributed detail view (e.g. Google Suite)
+  if (selectedId !== null) {
+    return wrapSection(renderConnectorSlot({
+          activeDetailId: selectedId,
+          openDetail: setSelectedId,
+          closeDetail: () => setSelectedId(null),
+          renderConnector: card => <ConnectorCard {...card} />,
+          renderDetail: renderDetailShell,
+        }))
+  }
+
+  if (activeTab === 'skills') return wrapOverview(renderSlot?.('connectors.skills', {}))
+
+  const handleAddCustomServer = async (event: FormEvent) => {
+    event.preventDefault()
+    setFormError(undefined)
+    const trimmedName = newName.trim()
+    if (!SERVER_NAME_RE.test(trimmedName)) {
+      setFormError(t('customNameInvalid'))
+      return
+    }
+    if (newTransport === 'streamable-http' && !/^https?:\/\//.test(newUrl.trim())) {
+      setFormError(t('customUrlInvalid'))
+      return
+    }
+    if (newTransport === 'stdio' && !newCommand.trim()) {
+      setFormError(t('customCommandRequired'))
+      return
+    }
+    const payload = newTransport === 'streamable-http'
+      ? {
+        serverName: trimmedName,
+        transport: 'streamable-http',
+        url: newUrl.trim(),
+        authType: newAuthType,
+        enabled: true,
+      }
+      : {
+        serverName: trimmedName,
+        transport: 'stdio',
+        command: newCommand.trim(),
+        ...(newArgs.trim() ? { args: newArgs.trim().split(/\s+/) } : {}),
+        ...(newCwd.trim() ? { cwd: newCwd.trim() } : {}),
+        enabled: true,
+      }
+    setBusy(trimmedName)
+    try {
+      await request(`${API}/servers`, { method: 'POST', body: JSON.stringify(payload) })
+      setNewName('')
+      setNewUrl('')
+      setNewCommand('')
+      setNewArgs('')
+      setNewCwd('')
+      setShowAddForm(false)
+      await refresh()
+    } catch (err) {
+      setFormError(err instanceof Error && err.message ? err.message : t('customAddFailed'))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const handleDeleteCustomServer = async (serverName: string) => {
+    setBusy(serverName)
+    setError(undefined)
+    try {
+      await request(`${API}/servers/${encodeURIComponent(serverName)}`, { method: 'DELETE' })
+      await refresh()
+    } catch {
+      setError(t('customDeleteFailed'))
+    } finally {
+      setBusy(undefined)
+    }
+  }
+
+  const connectorCards: ReactNode[] = singles.map(server => {
+    const pres = server.connectorPresentation
+    const id = pres.id ?? server.serverName
+    const derived = deriveConnectorState(
+      server,
+      busy === server.serverName,
+      connectorLink?.serverName === server.serverName,
+    )
+    return (
+      <ConnectorCard
+        key={server.serverName}
+        id={id}
+        name={pres.title}
+        icon={pres.icon}
+        description={pres.description[lang]}
+        status={t(derived.statusKey)}
+        tone={derived.tone}
+        actions={renderPrimaryAction(server, pres.title)}
+        onOpen={() => setSelectedId(id)}
+      />
+    )
+  })
+
+  for (const [id, groupServers] of groups) {
+    const group = groupServers[0].connectorPresentation.group!
+    const memberStates = groupServers.map(member =>
+      deriveConnectorState(member, busy === member.serverName, connectorLink?.serverName === member.serverName),
+    )
+    const connectedCount = memberStates.filter(state => state.tone === 'connected').length
+    const groupTone: ConnectorTone = memberStates.some(s => s.tone === 'connecting') ? 'connecting'
+      : memberStates.some(s => s.tone === 'error') ? 'error'
+        : connectedCount > 0 ? 'connected' : 'disconnected'
+    const status = connectedCount > 0
+      ? fmt(t('groupStatus'), { n: connectedCount, total: groupServers.length })
+      : t(groupTone === 'connecting' ? 'connecting' : groupTone === 'error' ? 'error' : 'disconnected')
+
+    connectorCards.push(
+      <ConnectorCard
+        key={id}
+        id={id}
+        name={group.title}
+        icon={group.icon}
+        description={group.description[lang]}
+        status={status}
+        tone={groupTone}
+        actions={(
+          <span className={styles.configureHint}>
+            {t('configure')}
+            <IconChevronRightOutlineRegular size={14} />
+          </span>
+        )}
+        onOpen={() => setSelectedId(id)}
+      />,
+    )
+  }
+
+  const activeConnectorIds = new Set([
+    ...groups.keys(),
+    ...singles.map(server => server.connectorPresentation.id ?? server.serverName),
+  ])
+  for (const plugin of agentPlugins) {
+    if (plugin.connectorIds.some(id => activeConnectorIds.has(id))) continue
+    const id = agentPluginDetailId(plugin.id)
+    connectorCards.push(
+      <ConnectorCard
+        key={id}
+        id={id}
+        name={plugin.name}
+        icon={plugin.icon}
+        description={plugin.description[lang]}
+        status={t(plugin.enabled ? 'agentPluginEnabled' : 'agentPluginDisabled')}
+        tone={plugin.enabled ? 'connected' : 'disconnected'}
+        actions={(
+          <span className={styles.configureHint}>
+            {t('configure')}
+            <IconChevronRightOutlineRegular size={14} />
+          </span>
+        )}
+        onOpen={() => setSelectedId(id)}
+      />,
+    )
+  }
+
+  return wrapOverview(
+    <>
+      {error !== undefined && <p role="alert" className={styles.error}>{error}</p>}
+      {loading && !servers.length && <p className={styles.hint}>{t('loading')}</p>}
+
+      {canManageAgentPlugins && showPluginImport && (
+        <AgentPluginImport
+          t={t}
+          busy={busy !== undefined}
+          pickDirectory={pickPluginDirectory}
+          onPreview={previewAgentPlugin}
+          onDiscover={discoverAgentPlugins}
+          onImport={async input => { await importAgentPlugin(input) }}
+          onDiscard={discardAgentPlugin}
+          onClose={() => setShowPluginImport(false)}
+        />
+      )}
+
+      <div className={connectorGrid}>
+        {connectorCards}
+        {renderConnectorSlot({
+          activeDetailId: selectedId,
+          openDetail: setSelectedId,
+          closeDetail: () => setSelectedId(null),
+          renderConnector: card => <ConnectorCard {...card} />,
+          renderDetail: renderDetailShell,
+        })}
+      </div>
+
+      <section className={styles.customSection}>
+        <div className={styles.panelHeader}>
+          <h3 className={styles.panelTitle}>{t('customSectionTitle')}</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<IconPlusOutlineRegular size={14} />}
+            onClick={() => { setShowAddForm(v => !v); setFormError(undefined) }}
+          >
+            {showAddForm ? t('cancel') : t('customAdd')}
+          </Button>
+        </div>
+
+        {showAddForm && (
+          <form className={styles.customForm} onSubmit={e => void handleAddCustomServer(e)}>
+            {formError && <p role="alert" className={styles.error}>{formError}</p>}
+            <div className={styles.customFormRow}>
+              <label className={styles.field}>
+                <span>{t('customServerName')}</span>
+                <Input value={newName} onChange={e => setNewName(e.currentTarget.value)} placeholder="my-mcp" />
+              </label>
+              <label className={styles.field}>
+                <span>{t('customTransport')}</span>
+                <select
+                  className={styles.select}
+                  value={newTransport}
+                  onChange={e => setNewTransport(e.currentTarget.value as 'streamable-http' | 'stdio')}
+                >
+                  <option value="streamable-http">streamable-http</option>
+                  <option value="stdio">stdio</option>
+                </select>
+              </label>
+            </div>
+
+            {newTransport === 'streamable-http' ? (
+              <div className={styles.customFormRow}>
+                <label className={styles.field}>
+                  <span>{t('customUrl')}</span>
+                  <Input value={newUrl} onChange={e => setNewUrl(e.currentTarget.value)} placeholder="https://example.com/mcp" />
+                </label>
+                <label className={styles.field}>
+                  <span>{t('customAuthType')}</span>
+                  <select
+                    className={styles.select}
+                    value={newAuthType}
+                    onChange={e => setNewAuthType(e.currentTarget.value as 'none' | 'oauth')}
+                  >
+                    <option value="none">{t('customAuthNone')}</option>
+                    <option value="oauth">{t('customAuthOAuth')}</option>
+                  </select>
+                </label>
+              </div>
+            ) : (
+              <>
+                <div className={styles.customFormRow}>
+                  <label className={styles.field}>
+                    <span>{t('customCommand')}</span>
+                    <Input value={newCommand} onChange={e => setNewCommand(e.currentTarget.value)} placeholder="npx" />
+                  </label>
+                  <label className={styles.field}>
+                    <span>{t('customArgs')}</span>
+                    <Input value={newArgs} onChange={e => setNewArgs(e.currentTarget.value)} placeholder="-y @modelcontextprotocol/server-..." />
+                  </label>
+                </div>
+                <label className={styles.field}>
+                  <span>{t('customCwd')}</span>
+                  <Input value={newCwd} onChange={e => setNewCwd(e.currentTarget.value)} />
+                </label>
+              </>
+            )}
+
+            <div className={styles.noticeActions}>
+              <Button type="submit" variant="primary" size="sm" disabled={busy !== undefined}>
+                {t('customSave')}
+              </Button>
+            </div>
+          </form>
+        )}
+
+        {customServers.length > 0 ? (
+          <div className={styles.flatList}>
+            {customServers.map(server => {
+              const derived = deriveConnectorState(
+                server,
+                busy === server.serverName,
+                connectorLink?.serverName === server.serverName,
+              )
+              const endpoint = server.transport === 'stdio'
+                ? [server.command, ...(server.args ?? [])].filter(Boolean).join(' ')
+                : (server.url ?? '')
+              return (
+                <Fragment key={server.serverName}>
+                  <div className={styles.flatRow}>
+                    <div className={styles.flatRowInfo}>
+                      <span className={styles.flatRowTitle}>
+                        <StateDot state={dotStates[derived.tone]} size={8} />
+                        <span>{server.serverName}</span>
+                      </span>
+                      <span className={styles.flatRowMeta}>
+                        {[t(derived.statusKey), endpoint, server.toolNames?.length ? `${server.toolNames.length} tools` : undefined]
+                          .filter(Boolean).join(' · ')}
+                      </span>
+                    </div>
+                    <div className={styles.flatRowActions}>
+                      {renderPrimaryAction(server, server.serverName)}
+                      {server.enabled !== false && derived.tone === 'error' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy !== undefined}
+                          onClick={() => toggleEnabled(server.serverName, false)}
+                        >
+                          {t('disable')}
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy !== undefined}
+                        onClick={() => void handleDeleteCustomServer(server.serverName)}
+                      >
+                        {t('customDelete')}
+                      </Button>
+                    </div>
+                  </div>
+                  {renderLinkNotice(server.serverName)}
+                </Fragment>
+              )
+            })}
+          </div>
+        ) : (
+          !showAddForm && <p className={styles.hint}>{t('customEmpty')}</p>
+        )}
+      </section>
+    </>,
+    <div className={styles.detailActions}>
+      {canManageAgentPlugins && !showPluginImport && (
+        <Button
+          variant="outline"
+          size="sm"
+          icon={<IconFolderOpenOutlineRegular size={14} />}
+          disabled={busy !== undefined}
+          onClick={() => setShowPluginImport(true)}
+        >
+          {t('agentPluginImport')}
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        className={styles.iconButton}
+        icon={<IconRefreshOutlineRegular size={16} />}
+        aria-label={t('refresh')}
+        title={t('refresh')}
+        disabled={loading}
+        onClick={() => void refresh()}
+      />
+    </div>,
+  )
+}
+
+function ConnectorCardsHost({ renderSlot, ...props }: ConnectorSlotProps & {
+  renderSlot: (name: 'settings.connectors.card', slotProps: ConnectorSlotProps) => ReactNode
+}) {
+  return renderSlot('settings.connectors.card', props)
 }
 
 /** Services required by this client plugin. */
 export const inject = ['slots', 'locale']
 
-/** Register the section into Web settings. */
+/** Register the Connectors page in the application sidebar. */
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'mcp-manager: dictionaries')
 
-  const injected = (): McpManagerSectionInjected => ({
+  const slots = ctx.slots as unknown as {
+    registerFactory(options: object, component: unknown): () => void
+    inject(name: string, factory: () => unknown): () => void
+    register(options: object, component: unknown): () => void
+    entries(name: string): readonly unknown[]
+    subscribe(name: string, listener: () => void): () => void
+  }
+  const skillsSlot = {
+    getSnapshot: () => slots.entries('connectors.skills').length > 0,
+    subscribe: (listener: () => void) => slots.subscribe('connectors.skills', listener),
+  }
+
+  const injected = () => ({
+    skillsSlot,
+    language: () => ctx.locale.getLocale().active === 'zh' ? 'zh' : 'en',
     list: async () => {
-      const body = await request<{ servers: McpServerView[] }>(`${API}/servers`)
+      const body = await request<{ servers: McpServerView[] }>(`${API}/connectors`)
       return body.servers
     },
-    add: async (entry: McpServerView) => {
-      const body = await request<{ ok: boolean }>(`${API}/servers`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      })
-      if (!body.ok) throw new Error(t('addFailed'))
+    listAll: async () => {
+      const body = await request<{ servers: CustomMcpServer[] }>(`${API}/servers`)
+      return body.servers
     },
-    update: async (serverName: string, entry: McpServerView) => {
-      const body = await request<{ ok: boolean }>(`${API}/servers/${encodeURIComponent(serverName)}/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
-      })
-      if (!body.ok) throw new Error(t('updateFailed'))
+    listAgentPlugins: () => request<{ plugins: AgentPluginView[]; canManage: boolean }>(`${API}/agent-plugins`),
+    pickPluginDirectory: async () => {
+      const desktop = (window as Window & { __DSH_DIRECTORY_PICKER__?: { pick(): Promise<string | null> } }).__DSH_DIRECTORY_PICKER__
+      if (desktop) return desktop.pick()
+      const workspace = ctx.get('uiWorkspace') as { pickDirectory(): Promise<string | null> } | undefined
+      if (!workspace) throw new Error(t('agentPluginBrowseFailed'))
+      return workspace.pickDirectory()
     },
     setEnabled: async (serverName: string, enabled: boolean) => {
       const body = await request<{ ok: boolean }>(`${API}/servers/${encodeURIComponent(serverName)}/toggle`, {
@@ -768,20 +1208,30 @@ export function apply(ctx: ClientContext): void {
       })
       if (!body.ok) throw new Error(t('toggleFailed'))
     },
-    remove: async (serverName: string) => {
-      await request<{ ok: boolean }>(`${API}/servers/${encodeURIComponent(serverName)}`, { method: 'DELETE' })
-    },
     reconnect: async (serverName: string) => {
       await request<{ ok: boolean }>(`${API}/servers/${encodeURIComponent(serverName)}/reconnect`, { method: 'POST' })
     },
   })
 
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'mcp-manager',
-    order: 16,
-    label: () => t('nav'),
+  slots.registerFactory({
+    name: 'connectors.cards',
+    scope: 'root',
+    children: { 'settings.connectors.card': { kind: 'list', scope: 'root' } },
+  }, ConnectorCardsHost)
+
+  slots.inject('main', () => slots.register({
+    name: 'main',
+    key: 'connectors',
     locale: NS,
+    children: { 'connectors.skills': { kind: 'single', scope: 'root' } },
     inject: injected,
   }, McpManagerSection))
+
+  slots.inject('sidebar.panellist', () => slots.register({
+    name: 'sidebar.panellist',
+    id: 'connectors',
+    order: 5,
+    label: () => t('nav'),
+    locale: NS,
+  }, ConnectorsPanelIcon))
 }

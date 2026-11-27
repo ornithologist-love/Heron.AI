@@ -2,7 +2,7 @@
 
 Heron.AI 是基于 DSH 的本地 AI 产品，可独立运行，也可由其他 WebView 宿主承载。公共版提供聊天与会话、模型接入、模板机制、Skills、MCP 管理、工作区、主题和原生会话通信能力。
 
-MCP 工具默认由 AI 通过 `search_mcp_tools` 按需加载到当前对话，Unreal MCP 工具保持常驻。HTTP 会话失效后自动重新连接。
+左侧导航的「连接器」可以管理已安装的服务。连接器详情显示工具，套组内的服务可分别启停。MCP 工具默认由 AI 通过 `search_mcp_tools` 按需加载到当前对话，Unreal MCP 工具保持常驻。HTTP 会话失效后自动重新连接。
 
 企业身份、团队模型、业务工具上下文、个人归档、团队会话采集和提交审查通过可选私有插件交付。普通构建不包含这些插件、部署配置或凭据。云端企业后台和服务器部署工具不属于首版公开客户端源码。
 
@@ -28,6 +28,14 @@ npm start -- --state-dir .cache/dev-state
 ## 插件机制
 
 运行时插件经 DSH 原生插件管理器安装、启停。发行方也可通过外部组合清单显式预装；用户已有的数据和启停选择继续保留。机制见[扩展架构](Docs/architecture/extensions.md)。
+
+在左侧导航的「连接器」可[导入 Agent Plugin](Docs/architecture/extensions.md#导入-agent-plugin)，支持目录、ZIP 及从本机 Claude Code、Codex、Antigravity 发现。
+切换到该页的「技能」可浏览、搜索已安装的技能，并编辑可写的技能。
+连接器详情支持将已安装的 Agent Plugin [导出为 ZIP](Docs/architecture/extensions.md#导出-agent-plugin)。CLI 也可用 `npm start -- agent-plugin export <id> --output <file.zip>` 导出。
+
+Google Connector 可从设置独立启停 Drive、Docs、Sheets、Slides、Calendar 和 Gmail。见 [Google Connector](packages/common/google-connector/README.md)。
+
+[Linear Connector](packages/agent-plugins/linear-connector/README.md) 和 [Notion Connector](packages/agent-plugins/notion-connector/README.md) 在连接器设置中独立启用和授权。工具目录取自各自的官方服务。
 
 在设置的[已归档的会话](Docs/architecture/extensions.md#会话归档)中，可以查找、恢复或彻底删除已归档的本机会话。
 

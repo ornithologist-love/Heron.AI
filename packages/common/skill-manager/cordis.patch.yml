@@ -1,10 +1,10 @@
-# dsh-skill-manager: adds a Skill Manager page to the settings panel of the
+# dsh-skill-manager: adds a Skill Manager tab to Connectors in the
 # web profile via `dsh plugin --profile web add <this repo>`.
 # One row carries both planes: the host half (`dsh-skill-manager`)
 # reads `ctx.skills` (the layered SkillRegistry) and serves the
 # `/skill-manager` RPC endpoints (list / files / read / write / importSkill /
 # exportSkill / deleteSkill) over its own channel; the package's ./client
-# export (dsh.client.platform: web) registers the `settings.section` page.
+# export (dsh.client.platform: web) contributes the `connectors.skills` slot.
 - insert:
     - id: dsh-skill-manager
       name: 'dsh-skill-manager'

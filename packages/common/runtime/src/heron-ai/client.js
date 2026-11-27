@@ -5,8 +5,6 @@ window.__ModuleLoader__.load({
     const Ui = require('@deepseek-ai/dsh-client-ui-primitives')
     const h = React.createElement
     const phoneMedia = matchMedia('(max-width: 767px)')
-    const subscribePhone = notify => { phoneMedia.addEventListener('change', notify); return () => phoneMedia.removeEventListener('change', notify) }
-    const usePhone = () => React.useSyncExternalStore(subscribePhone, () => phoneMedia.matches)
     /* HERON_AI_WORKSPACES */
     /* HERON_AI_THEMES */
     const templatesPlugin = (() => {
@@ -266,45 +264,8 @@ window.__ModuleLoader__.load({
       [data-menu-group]:has(>[data-menu-group-heading] .heron-ai-model-brand)>[data-menu-group-heading]{padding-top:6px;padding-bottom:4px;color:var(--dsw-alias-label-secondary)}
       .heron-ai-model-credits{flex:none;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover);border-radius:4px;padding:1px 5px;font-size:11px}
       .heron-ai-model-provider-setup:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-border-l3));outline-offset:-2px}
-      .heron-ai-mcp-trigger{--heron-ai-mcp-color:var(--dsw-alias-label-tertiary);display:inline-flex;align-items:center;justify-content:center;gap:7px;flex:none;min-height:32px;padding:5px 10px;border:0;border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:13px;font-weight:600;line-height:20px;white-space:nowrap;cursor:pointer;box-shadow:none}
-      .heron-ai-mcp-trigger[data-status=success]{--heron-ai-mcp-color:var(--dsw-alias-state-success-primary,#16a34a)}
-      .heron-ai-mcp-trigger[data-status=warning]{--heron-ai-mcp-color:#d99a00}
-      .heron-ai-mcp-trigger[data-status=error]{--heron-ai-mcp-color:var(--dsw-alias-state-error-primary,#dc2626)}
-      .heron-ai-mcp-trigger:hover{color:var(--dsw-alias-label-secondary)}
-      .heron-ai-mcp-trigger:focus-visible{outline:2px solid var(--dsw-alias-label-secondary);outline-offset:2px}
-      .heron-ai-mcp-dot{width:8px;height:8px;flex:none;border-radius:50%;background:var(--heron-ai-mcp-color);box-shadow:0 0 0 3px color-mix(in srgb,var(--heron-ai-mcp-color) 15%,transparent)}
-      .heron-ai-mcp-action{font-size:12px;font-weight:500;color:var(--dsw-alias-label-secondary)}
       [data-heron-ai-acp-mcp=true]>section>div:first-of-type{display:none!important}
     `
-    function McpStatusButton({ ctx }) {
-      const snapshot = React.useSyncExternalStore(ctx.sessions.list.subscribe, ctx.sessions.list.getSnapshot)
-      const { sessionId } = React.useSyncExternalStore(ctx.uiWorkspace.selection.subscribe, ctx.uiWorkspace.selection.getSnapshot)
-      const [status, setStatus] = React.useState({ servers: [], loaded: false, error: false })
-      React.useEffect(() => {
-        let disposed = false
-        const read = () => api('/mcp-manager/api/servers').then(value => {
-          if (!disposed) setStatus({ servers: value.servers ?? [], loaded: true, error: false })
-        }, () => { if (!disposed) setStatus(previous => ({ ...previous, error: true })) })
-        void read(); const timer = setInterval(read, 3000)
-        return () => { disposed = true; clearInterval(timer) }
-      }, [])
-      const enabled = status.servers.filter(server => server.enabled !== false)
-      const connected = enabled.filter(server => server.status === 'connected').length
-      const failed = enabled.filter(server => ['error', 'offline'].includes(server.status)).length
-      const total = enabled.length
-      const tone = status.error ? 'error' : !status.loaded || !total ? 'neutral'
-        : connected === total ? 'success' : failed === total ? 'error' : 'warning'
-      const message = status.error ? '状态读取失败' : !status.loaded ? '正在读取状态' : !total ? '没有启用的服务器'
-        : connected === total ? '全部连接成功' : failed === total ? '全部连接失败' : failed ? '部分连接失败' : '正在连接'
-      const count = !status.loaded || status.error ? '—' : `${connected}/${total}`
-      const action = tone === 'warning' || tone === 'error' ? '检查' : total ? '管理' : '配置'
-      return h('button', { type:'button', className:'heron-ai-mcp-trigger', 'data-status':tone,
-        title:`${message}；${connected}/${total} 个已启用服务器已连接。点击管理 MCP`,
-        'aria-label':`MCP ${count}，${message}，点击管理 MCP`,
-        onClick:() => ctx.get('settingsShell')?.open('mcp-manager') },
-        h('span', {className:'heron-ai-mcp-dot', 'aria-hidden':true}),
-        h('span', null, `MCP ${count}`), h('span', {className:'heron-ai-mcp-action', 'aria-hidden':true}, action))
-    }
     function installMobilePresentation(ctx) {
       const icon = path => h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.7, 'aria-hidden': true },
         h('path', { d: path, strokeLinecap: 'round', strokeLinejoin: 'round' }))
@@ -313,7 +274,7 @@ window.__ModuleLoader__.load({
           h('button', { className: 'heron-ai-mobile-icon', type: 'button', 'aria-label': '会话列表', onClick: () => ctx.layout.showSidebar() },
             icon('M4 6h16M4 12h16M4 18h16')),
           h('span', { className: 'heron-ai-mobile-title' }, 'AI 助手'),
-          h('div', { className: 'heron-ai-mobile-header-actions' }, h(McpStatusButton, { ctx }),
+          h('div', { className: 'heron-ai-mobile-header-actions' },
             h('button', { className: 'heron-ai-mobile-icon', type: 'button', 'aria-label': '设置', onClick: () => ctx.settingsShell.open('general') },
               icon('M4 7h16M4 17h16M8 4v6M16 14v6')),
             renderSlot('heronAi.mobile.header.action', {})))
@@ -425,11 +386,6 @@ window.__ModuleLoader__.load({
                 style: { color: 'var(--dsw-alias-button-primary-fill)' } }, help.label), ' 获取。') : null
             return signIn ? h('div', { className: 'heron-ai-provider-card-extras' }, h(ProviderSignIn, { provider: provider.provider, signIn }), line) : line
           }))
-      for (const name of ['conversation.session.header.utilities', 'conversation.hero.options']) {
-        ctx.slots.inject(name, () => ctx.slots.register({
-          name, id: 'heron-ai-mcp-manager', order: name === 'conversation.hero.options' ? 50 : -20,
-        }, () => usePhone() && !window.__HERON_AI_SESSION_VIEW__ ? null : h(McpStatusButton, { ctx })))
-      }
       ctx.inject(['layout', 'settingsShell'], installMobilePresentation)
       ctx.effect(() => {
         const tag = document.createElement('style')

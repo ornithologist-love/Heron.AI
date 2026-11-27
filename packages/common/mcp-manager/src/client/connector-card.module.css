@@ -1,0 +1,115 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  min-height: 124px;
+  padding: 14px;
+  border: 1px solid var(--dsw-alias-settings-card-stroke);
+  border-radius: var(--dsw-radius-lg);
+  background: var(--dsw-alias-settings-card-fill);
+  color: var(--dsw-alias-label-primary);
+  transition: border-color 140ms ease, background-color 140ms ease;
+}
+
+.card[data-clickable] {
+  cursor: pointer;
+}
+
+.card[data-clickable]:hover {
+  border-color: var(--dsw-alias-border-l1, var(--dsw-alias-label-tertiary));
+}
+
+.card[data-clickable]:focus-visible {
+  outline: 2px solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.icon[data-branded] {
+  background: #fff;
+}
+
+.icon img {
+  display: block;
+  object-fit: contain;
+}
+
+.identity {
+  flex: 1;
+  min-width: 0;
+}
+
+.name {
+  margin: 0;
+  overflow: hidden;
+  font: 600 15px/22px var(--dsw-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.description {
+  display: -webkit-box;
+  margin: 2px 0 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xs-13);
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 28px;
+}
+
+.actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dsw-alias-label-secondary);
+  font: var(--dsw-font-xxs-12);
+}
+
+.statusText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
